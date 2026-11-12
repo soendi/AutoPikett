@@ -40,6 +40,7 @@ __all__ = [
     "WAIT_BETWEEN_TRIES_S",
     "WEEKDAYS",
     "available_update",
+    "clear_history",
     "default_settings",
     "download_file",
     "due_slots",
@@ -479,6 +480,15 @@ def load_history(
 
     entries = [HistoryEntry.from_dict(item) for item in data]
     return [entry for entry in entries if entry is not None][:limit]
+
+
+def clear_history(path: Path | None = None) -> None:
+    """Löscht alle gespeicherten Status-Einträge."""
+    target = Path(path) if path is not None else history_path()
+    try:
+        target.unlink()
+    except FileNotFoundError:
+        return
 
 
 def record_history(

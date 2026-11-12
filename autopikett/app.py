@@ -108,8 +108,8 @@ class AutoPikettApp:
 
     def _build_ui(self) -> None:
         self.root.title(f"{core.APP_NAME} v{core.APP_VERSION}")
-        self.root.geometry("1060x790")
-        self.root.minsize(940, 740)
+        self.root.geometry("1060x800")
+        self.root.minsize(940, 760)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._set_window_icon()
 
@@ -216,6 +216,16 @@ class AutoPikettApp:
         )
         frame.pack(fill="x", pady=(12, 0))
 
+        toolbar = ttk.Frame(frame)
+        toolbar.pack(fill="x", pady=(0, 6))
+        ttk.Label(toolbar, text="Neueste zuerst", foreground="#666666").pack(side="left")
+        ttk.Button(
+            toolbar, text="Verlauf leeren", command=self._clear_history
+        ).pack(side="right")
+
+        body = ttk.Frame(frame)
+        body.pack(fill="both", expand=True)
+
         columns = ("zeit", "auftrag", "nummer", "ausloeser", "ergebnis")
         headings = {
             "zeit": "Zeit",
@@ -233,7 +243,7 @@ class AutoPikettApp:
         }
 
         self.history_tree = ttk.Treeview(
-            frame, columns=columns, show="headings", height=7, selectmode="browse"
+            body, columns=columns, show="headings", height=7, selectmode="browse"
         )
         for name in columns:
             self.history_tree.heading(name, text=headings[name])
@@ -242,7 +252,7 @@ class AutoPikettApp:
             )
 
         scroll = ttk.Scrollbar(
-            frame, orient="vertical", command=self.history_tree.yview
+            body, orient="vertical", command=self.history_tree.yview
         )
         self.history_tree.configure(yscrollcommand=scroll.set)
         self.history_tree.pack(side="left", fill="both", expand=True)
@@ -266,6 +276,26 @@ class AutoPikettApp:
         )
         tags = () if entry.ok else ("failed",)
         self.history_tree.insert("", index, values=values, tags=tags)
+
+    def _clear_history(self) -> None:
+        if not messagebox.askyesno(
+            core.APP_NAME, "Status-Tabelle wirklich leeren?"
+        ):
+            return
+
+        try:
+            core.clear_history(self.history_file)
+        except OSError as error:
+            logger.exception("Verlauf konnte nicht geleert werden")
+            messagebox.showerror(
+                core.APP_NAME, f"Verlauf konnte nicht geleert werden:\n{error}"
+            )
+            return
+
+        self.history = []
+        for item in self.history_tree.get_children():
+            self.history_tree.delete(item)
+        logger.info("Status-Tabelle geleert.")
 
     def _set_window_icon(self) -> None:
         try:

@@ -313,6 +313,22 @@ def test_history_skips_invalid_entries(tmp_path) -> None:
     assert entries[0].ok is True
 
 
+def test_clear_history_removes_entries(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    core.record_history(
+        core.HistoryEntry("2026-11-09T08:00:00", core.ACTION_ON, "1", "Zeitplan", True),
+        target,
+    )
+    assert core.load_history(target) != []
+
+    core.clear_history(target)
+    assert core.load_history(target) == []
+
+    # Mehrfaches Leeren darf nicht scheitern.
+    core.clear_history(target)
+    assert core.load_history(target) == []
+
+
 def test_format_timestamp() -> None:
     assert core.format_timestamp("2026-11-09T08:00:00") == "09.11.2026 08:00:00"
     assert core.format_timestamp("kaputt") == "kaputt"

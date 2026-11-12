@@ -17,7 +17,8 @@ drücken - per `pywinauto`.
 - jede Umschaltung wird dreimal gewählt (wählen, 10 s warten, wählen,
   10 s warten, wählen), damit das Pikett sicher umgeschaltet ist
 - Status-Tabelle im Fenster: ein Eintrag pro Auftrag mit Zeit, Auftrag,
-  gewählter Nummer, Auslöser und Ergebnis (erfolgreich / fehlgeschlagen)
+  gewählter Nummer, Auslöser und Ergebnis (erfolgreich / fehlgeschlagen),
+  inklusive Schaltfläche "Verlauf leeren"
 - Systray-Symbol mit Statuspunkt: **grün = Pikett ein**, **rot = Pikett aus**
 - Einstellungen liegen im Benutzerordner
 - automatisches Selbst-Update über die GitHub-Releases
