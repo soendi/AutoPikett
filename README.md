@@ -71,8 +71,11 @@ auf die Verknüpfung öffnet das Fenster wie gewohnt.
 %APPDATA%\AutoPikett\logs\autopikett.log
 ```
 
-`history.json` enthält die Status-Tabelle (die letzten 200 Aufträge), damit
-nach einem Neustart sichtbar bleibt, ob die Anrufe getätigt wurden.
+`history.json` enthält die Status-Tabelle, damit nach einem Neustart
+sichtbar bleibt, ob die Anrufe getätigt wurden. Einträge werden automatisch
+gelöscht, sobald sie älter als zwei Wochen sind (zusätzlich gilt eine
+Obergrenze von 200 Einträgen). Das Aufräumen passiert beim Start und nach
+jedem Auftrag.
 
 ## Updates
 

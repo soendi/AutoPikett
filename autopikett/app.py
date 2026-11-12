@@ -79,7 +79,8 @@ class AutoPikettApp:
         self.settings = settings
         self.settings_file = core.settings_path()
         self.history_file = core.history_path()
-        self.history: list[core.HistoryEntry] = core.load_history()
+        # Beim Start gleich Einträge entfernen, die älter als zwei Wochen sind.
+        self.history: list[core.HistoryEntry] = core.prune_history()
 
         self._settings_lock = threading.RLock()
         self._dial_lock = threading.Lock()
@@ -292,6 +293,13 @@ class AutoPikettApp:
         )
         tags = () if entry.ok else ("failed",)
         self.history_tree.insert("", index, values=values, tags=tags)
+
+    def _refresh_history_table(self, entries: list[core.HistoryEntry]) -> None:
+        """Tabelle komplett neu aufbauen (z. B. nach dem Entfernen alter Einträge)."""
+        for item in self.history_tree.get_children():
+            self.history_tree.delete(item)
+        for entry in entries:
+            self._insert_history_row(entry)
 
     def _clear_history(self) -> None:
         if not messagebox.askyesno(
@@ -613,7 +621,7 @@ class AutoPikettApp:
             self.history = core.record_history(entry, path=self.history_file)
         except OSError:
             logger.exception("Status-Eintrag konnte nicht gespeichert werden")
-        self._post("history", entry)
+        self._post("history", list(self.history))
 
     # --------------------------------------------------------
     # SYSTRAY
@@ -725,7 +733,7 @@ class AutoPikettApp:
             self._refresh_tray(bool(payload))
             self._refresh_status()
         elif kind == "history":
-            self._insert_history_row(payload, index=0)  # type: ignore[arg-type]
+            self._refresh_history_table(payload)  # type: ignore[arg-type]
         elif kind == "info":
             messagebox.showinfo(core.APP_NAME, str(payload))
         elif kind == "error":

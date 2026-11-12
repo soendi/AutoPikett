@@ -321,15 +321,16 @@ def test_history_keeps_one_entry_per_job_newest_first(tmp_path) -> None:
         "kein Anruf gestartet",
     )
 
-    core.record_history(first, target)
-    entries = core.record_history(second, target)
+    now = datetime(2026, 11, 9, 13, 0)
+    core.record_history(first, target, now=now)
+    entries = core.record_history(second, target, now=now)
 
     assert [entry.timestamp for entry in entries] == [
         "2026-11-09T12:00:00",
         "2026-11-09T08:00:00",
     ]
 
-    loaded = core.load_history(target)
+    loaded = core.load_history(target, now=now)
     assert len(loaded) == 2
     assert loaded[0].result_label() == "fehlgeschlagen"
     assert loaded[1].result_label() == "erfolgreich"
@@ -339,6 +340,7 @@ def test_history_keeps_one_entry_per_job_newest_first(tmp_path) -> None:
 
 def test_history_is_limited(tmp_path) -> None:
     target = tmp_path / "history.json"
+    now = datetime(2026, 11, 9, 13, 0)
     for index in range(5):
         core.record_history(
             core.HistoryEntry(
@@ -346,8 +348,9 @@ def test_history_is_limited(tmp_path) -> None:
             ),
             target,
             limit=3,
+            now=now,
         )
-    assert len(core.load_history(target)) == 3
+    assert len(core.load_history(target, now=now)) == 3
 
 
 def test_history_tolerates_broken_file(tmp_path) -> None:
@@ -389,6 +392,80 @@ def test_clear_history_removes_entries(tmp_path) -> None:
     # Mehrfaches Leeren darf nicht scheitern.
     core.clear_history(target)
     assert core.load_history(target) == []
+
+
+def _history_entry(number: str, timestamp: str) -> dict[str, object]:
+    return {
+        "timestamp": timestamp,
+        "action": "on",
+        "number": number,
+        "ok": True,
+    }
+
+
+def test_history_drops_entries_older_than_two_weeks(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    now = datetime(2026, 11, 12, 12, 0)
+    target.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    _history_entry("frisch", "2026-11-11T08:00:00"),
+                    # genau 14 Tage alt -> bleibt
+                    _history_entry("grenze", "2026-10-29T12:00:00"),
+                    # 15 Tage alt -> weg
+                    _history_entry("alt", "2026-10-28T08:00:00"),
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = core.load_history(target, now=now)
+    assert [entry.number for entry in loaded] == ["frisch", "grenze"]
+
+
+def test_history_drops_unreadable_timestamps(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    target.write_text(
+        json.dumps({"entries": [_history_entry("kaputt", "gestern")]}),
+        encoding="utf-8",
+    )
+    assert core.load_history(target) == []
+
+
+def test_prune_history_removes_old_entries_from_file(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    now = datetime(2026, 11, 12, 12, 0)
+    target.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    _history_entry("frisch", "2026-11-12T08:00:00"),
+                    _history_entry("alt", "2026-09-01T08:00:00"),
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    kept = core.prune_history(target, now=now)
+    assert [entry.number for entry in kept] == ["frisch"]
+
+    raw = json.loads(target.read_text(encoding="utf-8"))
+    assert [item["number"] for item in raw["entries"]] == ["frisch"]
+
+
+def test_prune_history_without_file(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    assert core.prune_history(target) == []
+    assert not target.exists()
+
+
+def test_history_cutoff_is_two_weeks() -> None:
+    now = datetime(2026, 11, 12, 12, 0)
+    assert core.history_cutoff(now).isoformat() == "2026-10-29T12:00:00"
+    assert core.HISTORY_MAX_AGE_DAYS == 14
 
 
 def test_format_timestamp() -> None:

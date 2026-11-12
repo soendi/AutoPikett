@@ -30,7 +30,10 @@ __all__ = [
     "DayPlan",
     "GITHUB_REPO",
     "HISTORY_LIMIT",
+    "HISTORY_MAX_AGE_DAYS",
     "HistoryEntry",
+    "history_cutoff",
+    "prune_history",
     "HITS_PER_TRIGGER",
     "Settings",
     "SLOTS_PER_DAY",
@@ -64,7 +67,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"
@@ -106,6 +109,8 @@ UPDATE_INTERVAL_S = 6 * 60 * 60
 
 # Status-Tabelle: ein Eintrag pro Auftrag, so viele werden aufbewahrt.
 HISTORY_LIMIT = 200
+# Einträge, die älter sind, werden automatisch gelöscht.
+HISTORY_MAX_AGE_DAYS = 14
 
 # Farben des Systray-Punkts.
 TRAY_COLOR_ON = "#2ecc71"
@@ -485,10 +490,29 @@ def history_path() -> Path:
     return user_data_dir() / "history.json"
 
 
+def history_cutoff(now: datetime | None = None) -> datetime:
+    """Ältester Zeitpunkt, der noch aufbewahrt wird (zwei Wochen)."""
+    return (now or datetime.now()) - timedelta(days=HISTORY_MAX_AGE_DAYS)
+
+
+def _is_recent(entry: HistoryEntry, cutoff: datetime) -> bool:
+    """Eintrag jünger als die Aufbewahrungsfrist?"""
+    try:
+        moment = datetime.fromisoformat(entry.timestamp)
+    except (TypeError, ValueError):
+        # Ohne lesbaren Zeitstempel lässt sich das Alter nicht prüfen.
+        return False
+    return moment >= cutoff
+
+
 def load_history(
-    path: Path | None = None, limit: int = HISTORY_LIMIT
+    path: Path | None = None, limit: int = HISTORY_LIMIT, now: datetime | None = None
 ) -> list[HistoryEntry]:
-    """Gespeicherte Status-Einträge, neueste zuerst."""
+    """Gespeicherte Status-Einträge, neueste zuerst.
+
+    Einträge, die älter als ``HISTORY_MAX_AGE_DAYS`` Tage sind, werden
+    nicht mehr zurückgegeben.
+    """
     target = Path(path) if path is not None else history_path()
     if not target.exists():
         return []
@@ -505,8 +529,13 @@ def load_history(
     if not isinstance(data, list):
         return []
 
+    cutoff = history_cutoff(now)
     entries = [HistoryEntry.from_dict(item) for item in data]
-    return [entry for entry in entries if entry is not None][:limit]
+    return [
+        entry
+        for entry in entries
+        if entry is not None and _is_recent(entry, cutoff)
+    ][:limit]
 
 
 def clear_history(path: Path | None = None) -> None:
@@ -518,13 +547,7 @@ def clear_history(path: Path | None = None) -> None:
         return
 
 
-def record_history(
-    entry: HistoryEntry, path: Path | None = None, limit: int = HISTORY_LIMIT
-) -> list[HistoryEntry]:
-    """Hängt einen Eintrag an (neueste zuerst) und speichert die Liste."""
-    target = Path(path) if path is not None else history_path()
-    entries = ([entry] + load_history(target, limit=limit))[:limit]
-
+def _write_history(target: Path, entries: list[HistoryEntry]) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(target.suffix + ".tmp")
     with open(temporary, "w", encoding="utf-8") as handle:
@@ -536,6 +559,40 @@ def record_history(
         )
         handle.write("\n")
     temporary.replace(target)
+
+
+def record_history(
+    entry: HistoryEntry,
+    path: Path | None = None,
+    limit: int = HISTORY_LIMIT,
+    now: datetime | None = None,
+) -> list[HistoryEntry]:
+    """Hängt einen Eintrag an (neueste zuerst) und speichert die Liste.
+
+    Zu alte Einträge fallen dabei weg.
+    """
+    target = Path(path) if path is not None else history_path()
+    entries = ([entry] + load_history(target, limit=limit, now=now))[:limit]
+    _write_history(target, entries)
+    return entries
+
+
+def prune_history(
+    path: Path | None = None,
+    limit: int = HISTORY_LIMIT,
+    now: datetime | None = None,
+) -> list[HistoryEntry]:
+    """Löscht Einträge älter als zwei Wochen und schreibt die Datei neu."""
+    target = Path(path) if path is not None else history_path()
+    entries = load_history(target, limit=limit, now=now)
+
+    if not target.exists():
+        return entries
+
+    try:
+        _write_history(target, entries)
+    except OSError as error:
+        logger.warning("Status-Datei konnte nicht bereinigt werden: %s", error)
     return entries
 
 
