@@ -21,6 +21,8 @@ drücken - per `pywinauto`.
   inklusive Schaltfläche "Verlauf leeren"
 - Systray-Symbol mit Statuspunkt: **grün = Pikett ein**, **rot = Pikett aus**
 - Einstellungen liegen im Benutzerordner
+- automatischer Start mit Windows, direkt in den Systray (`--tray`), damit
+  der Zeitplan ohne offenes Fenster läuft - im Fenster abschaltbar
 - automatisches Selbst-Update über die GitHub-Releases
 
 ## Voreinstellungen
@@ -37,6 +39,15 @@ Montag bis Freitag aktiv, Samstag und Sonntag aus. Alle Tage starten mit:
 Als Nummern sind Platzhalter hinterlegt (`079 000 00 01` für Ein,
 `079 000 00 02` für Aus). Diese im Fenster durch die echten Pikett-Nummern
 ersetzen und speichern.
+
+## Autostart
+
+Der Installer legt einen Eintrag unter
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` an. AutoPikett prüft
+diesen Eintrag bei jedem Start und hält ihn passend zur Einstellung
+„Mit Windows starten" im Fenster aktuell. Gestartet wird mit `--tray`:
+die App landet direkt im Systray, ohne Fenster. Ein normaler Doppelklick
+auf die Verknüpfung öffnet das Fenster wie gewohnt.
 
 ## Speicherort der Daten
 

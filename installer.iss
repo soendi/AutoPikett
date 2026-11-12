@@ -39,8 +39,8 @@ Name: "{group}\AutoPikett"; Filename: "{app}\AutoPikett.exe"; IconFilename: "{ap
 Name: "{autodesktop}\AutoPikett"; Filename: "{app}\AutoPikett.exe"; IconFilename: "{app}\AutoPikett.exe"
 
 [Registry]
-; Autostart, damit der Zeitplan nach dem Login läuft.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "AutoPikett"; ValueData: """{app}\AutoPikett.exe"""; Flags: uninsdeletevalue
+; Autostart direkt in den Systray (--tray), damit kein Fenster aufgeht.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "AutoPikett"; ValueData: """{app}\AutoPikett.exe"" --tray"; Flags: uninsdeletevalue
 
 [Run]
 ; Nach der Installation starten - auch bei stillen Updates.

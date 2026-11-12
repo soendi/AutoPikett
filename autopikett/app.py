@@ -15,7 +15,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 import tkinter as tk
 
-from autopikett import core, dialer
+from autopikett import autostart, core, dialer
 from autopikett.core import (
     ACTION_LABELS,
     ACTION_OFF,
@@ -192,6 +192,14 @@ class AutoPikettApp:
             command=self._on_auto_update_toggle,
         ).pack(side="left", padx=8)
 
+        self.autostart_var = tk.BooleanVar(value=self.settings.autostart)
+        ttk.Checkbutton(
+            footer,
+            text="Mit Windows starten",
+            variable=self.autostart_var,
+            command=self._on_autostart_toggle,
+        ).pack(side="left", padx=8)
+
         ttk.Label(
             footer, text="Grüner Punkt = Pikett ein · Roter Punkt = Pikett aus"
         ).pack(side="right")
@@ -341,6 +349,7 @@ class AutoPikettApp:
             days=days,
             pikett_on=previous.pikett_on,
             auto_update=bool(self.auto_update_var.get()),
+            autostart=bool(self.autostart_var.get()),
             last_runs=dict(previous.last_runs),
         )
 
@@ -364,6 +373,19 @@ class AutoPikettApp:
         if settings is None:
             return
         self._store(settings)
+
+    def _on_autostart_toggle(self) -> None:
+        settings = self._collect_settings()
+        if settings is None:
+            return
+        self._store(settings)
+
+        if autostart.is_supported() and not autostart.apply(settings.autostart):
+            self.status_var.set(
+                "Autostart konnte nicht geändert werden (siehe Log)."
+            )
+            return
+        self._refresh_status()
 
     def _on_close(self) -> None:
         if self._updating:
@@ -700,26 +722,41 @@ class AutoPikettApp:
             pass
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    start_in_tray = autostart.TRAY_ARGUMENT in args
+
     setup_logging()
-    logger.info("%s %s startet.", core.APP_NAME, core.APP_VERSION)
+    logger.info(
+        "%s %s startet%s.",
+        core.APP_NAME,
+        core.APP_VERSION,
+        " (Systray)" if start_in_tray else "",
+    )
+
+    settings = core.load_settings()
+    # Autostart-Eintrag passend zur Einstellung setzen/entfernen.
+    autostart.apply(settings.autostart)
 
     lock = acquire_instance_lock()
     if lock is None:
         logger.warning("AutoPikett läuft bereits - zweite Instanz beendet sich.")
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showinfo(
-                core.APP_NAME, "AutoPikett läuft bereits im Systray."
-            )
-            root.destroy()
-        except Exception:
-            pass
+        if not start_in_tray:
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                messagebox.showinfo(
+                    core.APP_NAME, "AutoPikett läuft bereits im Systray."
+                )
+                root.destroy()
+            except Exception:
+                pass
         return 0
 
-    settings = core.load_settings()
     root = tk.Tk()
+    if start_in_tray:
+        # Direkt in den Systray, ohne dass ein Fenster aufblitzt.
+        root.withdraw()
     AutoPikettApp(root, settings)
     root.mainloop()
     lock.close()

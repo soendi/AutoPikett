@@ -63,7 +63,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"
@@ -218,6 +218,7 @@ class Settings:
     days: dict[str, DayPlan] = field(default_factory=default_days)
     pikett_on: bool = False
     auto_update: bool = True
+    autostart: bool = True
     last_runs: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -227,6 +228,7 @@ class Settings:
             "off_number": self.off_number,
             "pikett_on": self.pikett_on,
             "auto_update": self.auto_update,
+            "autostart": self.autostart,
             "last_runs": dict(self.last_runs),
             "days": {day: plan.to_dict() for day, plan in self.days.items()},
         }
@@ -271,6 +273,7 @@ def settings_from_dict(data: Any) -> Settings:
         days=days,
         pikett_on=bool(data.get("pikett_on", False)),
         auto_update=bool(data.get("auto_update", True)),
+        autostart=bool(data.get("autostart", True)),
         last_runs=_clean_runs(data.get("last_runs")),
     )
 

@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pytest
 
-from autopikett import core, dialer
+from autopikett import autostart, core, dialer
 
 MONDAY = datetime(2026, 11, 9, 8, 0)
 SATURDAY = datetime(2026, 11, 14, 12, 0)
@@ -37,6 +37,7 @@ def test_defaults_follow_the_requested_week() -> None:
     assert settings.on_number == core.DEFAULT_ON_NUMBER
     assert settings.off_number == core.DEFAULT_OFF_NUMBER
     assert settings.on_number != settings.off_number
+    assert settings.autostart is True
 
 
 @pytest.mark.parametrize(
@@ -58,6 +59,7 @@ def test_settings_roundtrip(tmp_path) -> None:
     settings = core.default_settings()
     settings.on_number = "0800 111 22 33"
     settings.auto_update = False
+    settings.autostart = False
     settings.days["Montag"].slots[1] = core.Slot("11:45", core.ACTION_ON)
     settings.days["Sonntag"].enabled = True
 
@@ -67,6 +69,7 @@ def test_settings_roundtrip(tmp_path) -> None:
     assert loaded.on_number == "0800 111 22 33"
     assert loaded.off_number == core.DEFAULT_OFF_NUMBER
     assert loaded.auto_update is False
+    assert loaded.autostart is False
     assert loaded.days["Montag"].slots[1].time == "11:45"
     assert loaded.days["Sonntag"].enabled is True
     assert loaded.days["Samstag"].enabled is False
@@ -332,6 +335,28 @@ def test_clear_history_removes_entries(tmp_path) -> None:
 def test_format_timestamp() -> None:
     assert core.format_timestamp("2026-11-09T08:00:00") == "09.11.2026 08:00:00"
     assert core.format_timestamp("kaputt") == "kaputt"
+
+
+def test_autostart_is_ignored_on_other_platforms(monkeypatch) -> None:
+    monkeypatch.setattr(autostart.sys, "platform", "linux")
+
+    assert autostart.is_supported() is False
+    assert autostart.is_enabled() is False
+    assert autostart.apply(True) is False
+    assert autostart.apply(False) is False
+
+
+def test_autostart_command_needs_installed_exe(monkeypatch) -> None:
+    monkeypatch.delattr(autostart.sys, "frozen", raising=False)
+    assert autostart.autostart_command() is None
+
+
+def test_autostart_command_starts_in_tray(monkeypatch, tmp_path) -> None:
+    exe = tmp_path / "AutoPikett.exe"
+    monkeypatch.setattr(autostart.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(autostart.sys, "executable", str(exe))
+
+    assert autostart.autostart_command() == f'"{exe}" --tray'
 
 
 def test_parse_version() -> None:
