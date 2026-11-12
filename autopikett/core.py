@@ -15,6 +15,7 @@ import re
 import shutil
 import urllib.error
 import urllib.request
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -63,7 +64,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"
@@ -360,10 +361,15 @@ def job_key(now: datetime, slot: Slot) -> str:
     return f"{now:%Y-%m-%d}|{slot.time}|{slot.action}"
 
 
-def pending_jobs(settings: Settings, now: datetime) -> list[tuple[str, str]]:
+def pending_jobs(
+    settings: Settings,
+    now: datetime,
+    skip_days: Collection[date] = (),
+) -> list[tuple[str, str]]:
     """Fällige, noch nicht ausgeführte Aufträge als (Schlüssel, Aktion).
 
     Alte Einträge aus früheren Tagen werden dabei aus ``last_runs`` entfernt.
+    ``skip_days`` sind Tage (z. B. Feiertage), an denen nichts geschaltet wird.
     """
     today = now.strftime("%Y-%m-%d")
     settings.last_runs = {
@@ -371,6 +377,9 @@ def pending_jobs(settings: Settings, now: datetime) -> list[tuple[str, str]]:
         for key, moment in settings.last_runs.items()
         if key.startswith(today)
     }
+
+    if now.date() in skip_days:
+        return []
 
     jobs: list[tuple[str, str]] = []
     for slot in due_slots(settings, now):
@@ -381,10 +390,19 @@ def pending_jobs(settings: Settings, now: datetime) -> list[tuple[str, str]]:
     return jobs
 
 
-def next_event(settings: Settings, now: datetime) -> tuple[datetime, str, str] | None:
-    """Nächster geplanter Wechsel als (Zeitpunkt, Aktion, Wochentag)."""
-    for offset in range(8):
+def next_event(
+    settings: Settings,
+    now: datetime,
+    skip_days: Collection[date] = (),
+) -> tuple[datetime, str, str] | None:
+    """Nächster geplanter Wechsel als (Zeitpunkt, Aktion, Wochentag).
+
+    ``skip_days`` (Feiertage) werden übersprungen.
+    """
+    for offset in range(16):
         day: date = (now + timedelta(days=offset)).date()
+        if day in skip_days:
+            continue
         plan = plan_for_day(settings, day.weekday())
         if plan is None or not plan.enabled:
             continue

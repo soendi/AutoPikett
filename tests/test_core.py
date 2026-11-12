@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -131,6 +131,15 @@ def test_pending_jobs_run_only_once() -> None:
     assert core.pending_jobs(settings, MONDAY) == []
 
 
+def test_pending_jobs_skip_holidays() -> None:
+    settings = core.default_settings()
+
+    assert core.pending_jobs(settings, MONDAY, skip_days=(MONDAY.date(),)) == []
+    # Ein Feiertag an einem anderen Tag ändert nichts.
+    other_day = MONDAY.date() + timedelta(days=1)
+    assert core.pending_jobs(settings, MONDAY, skip_days=(other_day,)) != []
+
+
 def test_pending_jobs_forget_previous_days() -> None:
     settings = core.default_settings()
     settings.last_runs = {"2026-11-08|08:00|off": "alt", "kaputt": "alt"}
@@ -167,6 +176,27 @@ def test_next_event_skips_disabled_days_and_past_times() -> None:
     friday_evening = datetime(2026, 11, 13, 18, 0)
     moment, action, day = core.next_event(settings, friday_evening)
     assert (moment.strftime("%Y-%m-%d %H:%M"), action, day) == ("2026-11-16 08:00", "off", "Montag")
+
+
+def test_next_event_skips_holidays() -> None:
+    settings = core.default_settings()
+
+    moment, action, day = core.next_event(
+        settings, MONDAY.replace(hour=9, minute=0), skip_days=(MONDAY.date(),)
+    )
+    assert (moment.strftime("%Y-%m-%d %H:%M"), action, day) == (
+        "2026-11-10 08:00",
+        "off",
+        "Dienstag",
+    )
+
+    # Sonntag ist ohnehin aus, Montag als Feiertag -> Dienstag der Folgewoche.
+    moment, _, day = core.next_event(
+        settings,
+        datetime(2026, 11, 13, 18, 0),
+        skip_days=(datetime(2026, 11, 16).date(),),
+    )
+    assert (moment.strftime("%Y-%m-%d %H:%M"), day) == ("2026-11-17 08:00", "Dienstag")
 
 
 def test_next_event_without_active_days() -> None:

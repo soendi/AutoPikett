@@ -9,13 +9,13 @@ import subprocess
 import sys
 import tempfile
 import threading
-from datetime import datetime
+from datetime import date, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tkinter import messagebox, ttk
 import tkinter as tk
 
-from autopikett import autostart, core, dialer
+from autopikett import autostart, core, dialer, holidays
 from autopikett.core import (
     ACTION_LABELS,
     ACTION_OFF,
@@ -87,6 +87,10 @@ class AutoPikettApp:
         self._events: queue.Queue[tuple[str, object]] = queue.Queue()
         self._tray = None
         self._updating = False
+        self._holidays_loading = False
+        self._holidays_ready = threading.Event()
+        self._holiday_days: frozenset[date] = frozenset()
+        self._holiday_log_day: date | None = None
 
         self.day_vars: dict[str, tk.BooleanVar] = {}
         self.time_vars: dict[str, list[tk.StringVar]] = {}
@@ -99,6 +103,8 @@ class AutoPikettApp:
 
         self.root.after(EVENT_INTERVAL_MS, self._poll_events)
         self.root.after(STARTUP_UPDATE_DELAY_MS, self._auto_update_tick)
+        self.root.after(EVENT_INTERVAL_MS, self._load_holidays)
+        self.root.after(holidays.milliseconds_until_midnight(), self._holidays_tick)
 
         threading.Thread(target=self._scheduler_loop, daemon=True).start()
 
@@ -108,8 +114,8 @@ class AutoPikettApp:
 
     def _build_ui(self) -> None:
         self.root.title(f"{core.APP_NAME} v{core.APP_VERSION}")
-        self.root.geometry("1060x800")
-        self.root.minsize(940, 760)
+        self.root.geometry("1200x820")
+        self.root.minsize(1040, 760)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._set_window_icon()
 
@@ -175,6 +181,8 @@ class AutoPikettApp:
 
                 self.time_vars[day].append(time_var)
                 self.action_vars[day].append(action_var)
+
+        self._build_holidays(week)
 
         footer = ttk.Frame(outer)
         footer.pack(fill="x")
@@ -387,6 +395,100 @@ class AutoPikettApp:
             return
         self._refresh_status()
 
+    def _build_holidays(self, parent: tk.Widget) -> None:
+        """Rechts neben Mo-So die kommenden Feiertage des Kantons St. Gallen."""
+        frame = ttk.LabelFrame(
+            parent, text="Feiertage Kanton St. Gallen", padding=8
+        )
+        frame.grid(
+            row=0,
+            column=1 + SLOTS_PER_DAY,
+            rowspan=len(WEEKDAYS),
+            sticky="nsew",
+            padx=(8, 0),
+        )
+        parent.columnconfigure(1 + SLOTS_PER_DAY, weight=1)
+
+        head = ttk.Frame(frame)
+        head.pack(fill="x")
+        ttk.Label(head, text="die nächsten Termine", foreground="#666666").pack(
+            side="left"
+        )
+        ttk.Button(head, text="Aktualisieren", command=self._load_holidays).pack(
+            side="right"
+        )
+
+        self.holidays_text = tk.Text(
+            frame,
+            width=26,
+            height=8,
+            wrap="word",
+            borderwidth=0,
+            relief="flat",
+            background=self.root.cget("background"),
+            state="disabled",
+        )
+        self.holidays_text.pack(fill="both", expand=True, pady=(6, 0))
+
+        self.holidays_status_var = tk.StringVar(value="lade …")
+        ttk.Label(
+            frame,
+            textvariable=self.holidays_status_var,
+            foreground="#666666",
+        ).pack(fill="x", pady=(4, 0))
+
+    def _load_holidays(self) -> None:
+        """Feiertage im Hintergrund laden, damit das Fenster nicht hängt."""
+        if self._holidays_loading:
+            return
+        self._holidays_loading = True
+        self.holidays_status_var.set("lade …")
+        threading.Thread(target=self._fetch_holidays, daemon=True).start()
+
+    def _fetch_holidays(self) -> None:
+        try:
+            found = holidays.fetch_holidays()
+        except Exception:  # noqa: BLE001 - die Liste darf die App nicht stören
+            logger.exception("Feiertage konnten nicht geladen werden")
+            found = None
+        self._post("holidays", found)
+
+    def _show_holidays(self, found: object) -> None:
+        self._holidays_loading = False
+        loaded = found if isinstance(found, list) else None
+
+        if loaded is None:
+            # Ohne Verbindung bleibt die zuletzt geladene Liste stehen.
+            self.holidays_status_var.set("nicht geladen - Internetverbindung prüfen")
+            self._holidays_ready.set()
+            return
+
+        with self._settings_lock:
+            self._holiday_days = frozenset(entry.day for entry in loaded)
+
+        upcoming = holidays.pick_upcoming(loaded)
+        self.holidays_text.configure(state="normal")
+        self.holidays_text.delete("1.0", "end")
+        if upcoming:
+            for entry in upcoming:
+                self.holidays_text.insert("end", f"{entry.label()}\n")
+        else:
+            self.holidays_text.insert("end", "Keine Feiertage in den nächsten Wochen.")
+        self.holidays_text.configure(state="disabled")
+        self.holidays_status_var.set(f"Stand {datetime.now():%d.%m.%Y %H:%M}")
+        self._holidays_ready.set()
+
+        # Der nächste Wechsel kann sich durch einen Feiertag verschieben.
+        self._refresh_status()
+
+    def _holidays_tick(self) -> None:
+        """Beim Tageswechsel neu laden, damit vergangene Tage verschwinden."""
+        self._load_holidays()
+        if not self._stop.is_set():
+            self.root.after(
+                holidays.milliseconds_until_midnight(), self._holidays_tick
+            )
+
     def _on_close(self) -> None:
         if self._updating:
             self.quit_app()
@@ -403,11 +505,25 @@ class AutoPikettApp:
     # --------------------------------------------------------
 
     def _scheduler_loop(self) -> None:
+        # Erst schalten, wenn die Feiertage bekannt sind (sonst würde an einem
+        # Feiertag gleich nach dem Start noch gewählt).
+        self._holidays_ready.wait(timeout=20)
         while not self._stop.is_set():
             try:
                 now = datetime.now()
                 with self._settings_lock:
-                    jobs = core.pending_jobs(self.settings, now)
+                    holiday_days = self._holiday_days
+                    if now.date() in holiday_days and core.due_slots(
+                        self.settings, now
+                    ):
+                        if self._holiday_log_day != now.date():
+                            self._holiday_log_day = now.date()
+                            logger.info(
+                                "%s ist ein Feiertag - die Umschaltungen werden "
+                                "übersprungen.",
+                                now.date(),
+                            )
+                    jobs = core.pending_jobs(self.settings, now, skip_days=holiday_days)
                     # Sofort als erledigt markieren, damit kein zweiter
                     # Durchlauf denselben Auftrag erneut wählt.
                     for key, _ in jobs:
@@ -512,10 +628,10 @@ class AutoPikettApp:
                 "Einstellungen öffnen", lambda *_: self._post("open", None), default=True
             ),
             pystray.MenuItem(
-                "Pikett EIN jetzt schalten", lambda *_: self._post("manual", ACTION_ON)
+                "Pikett jetzt einschalten", lambda *_: self._post("manual", ACTION_ON)
             ),
             pystray.MenuItem(
-                "Pikett AUS jetzt schalten", lambda *_: self._post("manual", ACTION_OFF)
+                "Pikett jetzt ausschalten", lambda *_: self._post("manual", ACTION_OFF)
             ),
             pystray.MenuItem(
                 "Auf Updates prüfen", lambda *_: self._post("update_check", None)
@@ -560,7 +676,7 @@ class AutoPikettApp:
         with self._settings_lock:
             settings = self.settings
             text = core.state_label(settings.pikett_on)
-            event = core.next_event(settings, now)
+            event = core.next_event(settings, now, skip_days=self._holiday_days)
 
         if event is None:
             text += " · kein weiterer Wechsel geplant"
@@ -616,6 +732,8 @@ class AutoPikettApp:
                 target=self._run_job, args=(str(payload),), kwargs={"manual": True},
                 daemon=True,
             ).start()
+        elif kind == "holidays":
+            self._show_holidays(payload)
         elif kind == "update_check":
             self._start_update_check(manual=True)
         elif kind == "ask_update":
