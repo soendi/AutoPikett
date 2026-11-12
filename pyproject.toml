@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autopikett"
+version = "0.1.0"
+description = "Automatisierte Verwaltung von Pikett- und Bereitschaftszeiten"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "soendi" }
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+autopikett = "autopikett.cli:main"
