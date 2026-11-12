@@ -4,19 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autopikett"
-version = "0.1.0"
-description = "Automatisierte Verwaltung von Pikett- und Bereitschaftszeiten"
+version = "1.0.0"
+description = "Schaltet das Pikett zeitgesteuert per Telefonanruf ein und aus"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
   { name = "soendi" }
 ]
+dependencies = []
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+[project.optional-dependencies]
+windows = [
+  "pystray>=0.19",
+  "pillow>=10.0",
+  "pywinauto>=0.6.8",
+]
 
 [project.scripts]
-autopikett = "autopikett.cli:main"
+autopikett = "autopikett.app:main"
+
+[tool.setuptools]
+packages = ["autopikett"]

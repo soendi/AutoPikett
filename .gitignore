@@ -11,7 +11,9 @@ env/
 # Distribution / packaging
 build/
 dist/
+installer/
 *.egg-info/
+*.spec.bak
 
 # Testing
 .pytest_cache/
