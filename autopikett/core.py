@@ -28,6 +28,8 @@ __all__ = [
     "APP_VERSION",
     "DayPlan",
     "GITHUB_REPO",
+    "HISTORY_LIMIT",
+    "HistoryEntry",
     "HITS_PER_TRIGGER",
     "Settings",
     "SLOTS_PER_DAY",
@@ -41,6 +43,10 @@ __all__ = [
     "default_settings",
     "download_file",
     "due_slots",
+    "format_timestamp",
+    "history_path",
+    "load_history",
+    "record_history",
     "fetch_latest_release",
     "installer_asset_url",
     "job_key",
@@ -92,6 +98,9 @@ WAIT_BETWEEN_TRIES_S = 10
 
 # Prüfintervall für neue Releases.
 UPDATE_INTERVAL_S = 6 * 60 * 60
+
+# Status-Tabelle: ein Eintrag pro Auftrag, so viele werden aufbewahrt.
+HISTORY_LIMIT = 200
 
 # Farben des Systray-Punkts.
 TRAY_COLOR_ON = "#2ecc71"
@@ -384,6 +393,113 @@ def next_event(settings: Settings, now: datetime) -> tuple[datetime, str, str] |
 
 def state_label(pikett_on: bool) -> str:
     return "Pikett EIN" if pikett_on else "Pikett AUS"
+
+
+# ============================================================
+# STATUS-TABELLE (ein Eintrag pro Auftrag)
+# ============================================================
+
+
+@dataclass
+class HistoryEntry:
+    """Ergebnis eines Auftrags - bewusst einer, nicht ein Eintrag pro Anruf."""
+
+    timestamp: str
+    action: str
+    number: str
+    source: str = ""
+    ok: bool = False
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "action": self.action,
+            "number": self.number,
+            "source": self.source,
+            "ok": self.ok,
+            "detail": self.detail,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "HistoryEntry | None":
+        if not isinstance(data, dict):
+            return None
+        timestamp = data.get("timestamp")
+        action = data.get("action")
+        if not isinstance(timestamp, str) or action not in (ACTION_ON, ACTION_OFF):
+            return None
+        return cls(
+            timestamp=timestamp,
+            action=action,
+            number=str(data.get("number") or ""),
+            source=str(data.get("source") or ""),
+            ok=bool(data.get("ok", False)),
+            detail=str(data.get("detail") or ""),
+        )
+
+    def result_label(self) -> str:
+        return "erfolgreich" if self.ok else "fehlgeschlagen"
+
+    def action_label(self) -> str:
+        return f"Pikett {ACTION_LABELS.get(self.action, self.action)}"
+
+
+def format_timestamp(timestamp: str) -> str:
+    """ISO-Zeitstempel als 'TT.MM.JJJJ HH:MM:SS' für die Tabelle."""
+    try:
+        return datetime.fromisoformat(str(timestamp)).strftime("%d.%m.%Y %H:%M:%S")
+    except (TypeError, ValueError):
+        return str(timestamp)
+
+
+def history_path() -> Path:
+    return user_data_dir() / "history.json"
+
+
+def load_history(
+    path: Path | None = None, limit: int = HISTORY_LIMIT
+) -> list[HistoryEntry]:
+    """Gespeicherte Status-Einträge, neueste zuerst."""
+    target = Path(path) if path is not None else history_path()
+    if not target.exists():
+        return []
+
+    try:
+        with open(target, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError) as error:
+        logger.warning("Status-Datei %s nicht lesbar: %s", target, error)
+        return []
+
+    if isinstance(data, dict):
+        data = data.get("entries")
+    if not isinstance(data, list):
+        return []
+
+    entries = [HistoryEntry.from_dict(item) for item in data]
+    return [entry for entry in entries if entry is not None][:limit]
+
+
+def record_history(
+    entry: HistoryEntry, path: Path | None = None, limit: int = HISTORY_LIMIT
+) -> list[HistoryEntry]:
+    """Hängt einen Eintrag an (neueste zuerst) und speichert die Liste."""
+    target = Path(path) if path is not None else history_path()
+    entries = ([entry] + load_history(target, limit=limit))[:limit]
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(
+            {"entries": [item.to_dict() for item in entries]},
+            handle,
+            indent=2,
+            ensure_ascii=False,
+        )
+        handle.write("\n")
+    temporary.replace(target)
+    return entries
 
 
 # ============================================================

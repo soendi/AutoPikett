@@ -16,6 +16,8 @@ drücken - per `pywinauto`.
 - zwei Nummern: eine für "Pikett einschalten", eine für "Pikett ausschalten"
 - jede Umschaltung wird dreimal gewählt (wählen, 10 s warten, wählen,
   10 s warten, wählen), damit das Pikett sicher umgeschaltet ist
+- Status-Tabelle im Fenster: ein Eintrag pro Auftrag mit Zeit, Auftrag,
+  gewählter Nummer, Auslöser und Ergebnis (erfolgreich / fehlgeschlagen)
 - Systray-Symbol mit Statuspunkt: **grün = Pikett ein**, **rot = Pikett aus**
 - Einstellungen liegen im Benutzerordner
 - automatisches Selbst-Update über die GitHub-Releases
@@ -39,8 +41,12 @@ ersetzen und speichern.
 
 ```text
 %APPDATA%\AutoPikett\settings.json
+%APPDATA%\AutoPikett\history.json
 %APPDATA%\AutoPikett\logs\autopikett.log
 ```
+
+`history.json` enthält die Status-Tabelle (die letzten 200 Aufträge), damit
+nach einem Neustart sichtbar bleibt, ob die Anrufe getätigt wurden.
 
 ## Updates
 

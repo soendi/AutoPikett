@@ -245,6 +245,79 @@ def test_switch_pikett_rejects_unknown_action() -> None:
         dialer.switch_pikett("vielleicht", "1", "2", dial=lambda _: None, sleep=lambda _: None)
 
 
+def test_history_keeps_one_entry_per_job_newest_first(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    first = core.HistoryEntry(
+        "2026-11-09T08:00:00", core.ACTION_OFF, "0790000002", "Zeitplan", True
+    )
+    second = core.HistoryEntry(
+        "2026-11-09T12:00:00",
+        core.ACTION_ON,
+        "0790000001",
+        "Zeitplan",
+        False,
+        "kein Anruf gestartet",
+    )
+
+    core.record_history(first, target)
+    entries = core.record_history(second, target)
+
+    assert [entry.timestamp for entry in entries] == [
+        "2026-11-09T12:00:00",
+        "2026-11-09T08:00:00",
+    ]
+
+    loaded = core.load_history(target)
+    assert len(loaded) == 2
+    assert loaded[0].result_label() == "fehlgeschlagen"
+    assert loaded[1].result_label() == "erfolgreich"
+    assert loaded[1].action_label() == "Pikett Aus"
+    assert loaded[0].detail == "kein Anruf gestartet"
+
+
+def test_history_is_limited(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    for index in range(5):
+        core.record_history(
+            core.HistoryEntry(
+                f"2026-11-09T08:0{index}:00", core.ACTION_ON, "1", "Zeitplan", True
+            ),
+            target,
+            limit=3,
+        )
+    assert len(core.load_history(target)) == 3
+
+
+def test_history_tolerates_broken_file(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    target.write_text("nicht json", encoding="utf-8")
+    assert core.load_history(target) == []
+
+
+def test_history_skips_invalid_entries(tmp_path) -> None:
+    target = tmp_path / "history.json"
+    target.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {"timestamp": "2026-11-09T08:00:00", "action": "on", "ok": True},
+                    {"action": "on"},
+                    "kaputt",
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    entries = core.load_history(target)
+    assert len(entries) == 1
+    assert entries[0].ok is True
+
+
+def test_format_timestamp() -> None:
+    assert core.format_timestamp("2026-11-09T08:00:00") == "09.11.2026 08:00:00"
+    assert core.format_timestamp("kaputt") == "kaputt"
+
+
 def test_parse_version() -> None:
     assert core.parse_version("v1.2.3") == (1, 2, 3)
     assert core.parse_version("2.0") == (2, 0, 0)

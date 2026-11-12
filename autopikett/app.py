@@ -78,6 +78,8 @@ class AutoPikettApp:
         self.root = root
         self.settings = settings
         self.settings_file = core.settings_path()
+        self.history_file = core.history_path()
+        self.history: list[core.HistoryEntry] = core.load_history()
 
         self._settings_lock = threading.RLock()
         self._dial_lock = threading.Lock()
@@ -106,8 +108,8 @@ class AutoPikettApp:
 
     def _build_ui(self) -> None:
         self.root.title(f"{core.APP_NAME} v{core.APP_VERSION}")
-        self.root.geometry("1020x620")
-        self.root.minsize(920, 560)
+        self.root.geometry("1060x790")
+        self.root.minsize(940, 740)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._set_window_icon()
 
@@ -199,11 +201,71 @@ class AutoPikettApp:
             outer, textvariable=self.status_var, font=("Segoe UI", 10, "bold")
         ).pack(fill="x", pady=(12, 0))
 
+        self._build_history(outer)
+
         ttk.Label(
             outer,
             text=f"Gespeichert unter: {self.settings_file}",
             foreground="#666666",
-        ).pack(fill="x", pady=(4, 0))
+        ).pack(fill="x", pady=(6, 0))
+
+    def _build_history(self, parent: tk.Widget) -> None:
+        """Status-Tabelle unten: genau ein Eintrag pro Auftrag."""
+        frame = ttk.LabelFrame(
+            parent, text="Status der Umschaltungen (ein Eintrag pro Auftrag)", padding=8
+        )
+        frame.pack(fill="x", pady=(12, 0))
+
+        columns = ("zeit", "auftrag", "nummer", "ausloeser", "ergebnis")
+        headings = {
+            "zeit": "Zeit",
+            "auftrag": "Auftrag",
+            "nummer": "Gewählte Nummer",
+            "ausloeser": "Ausgelöst durch",
+            "ergebnis": "Ergebnis",
+        }
+        widths = {
+            "zeit": 150,
+            "auftrag": 120,
+            "nummer": 150,
+            "ausloeser": 120,
+            "ergebnis": 130,
+        }
+
+        self.history_tree = ttk.Treeview(
+            frame, columns=columns, show="headings", height=7, selectmode="browse"
+        )
+        for name in columns:
+            self.history_tree.heading(name, text=headings[name])
+            self.history_tree.column(
+                name, width=widths[name], anchor="w", stretch=name == "ergebnis"
+            )
+
+        scroll = ttk.Scrollbar(
+            frame, orient="vertical", command=self.history_tree.yview
+        )
+        self.history_tree.configure(yscrollcommand=scroll.set)
+        self.history_tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        self.history_tree.tag_configure("failed", foreground="#b91c1c")
+
+        for entry in self.history:
+            self._insert_history_row(entry)
+
+    def _insert_history_row(
+        self, entry: core.HistoryEntry, index: str | int = "end"
+    ) -> None:
+        """Eine Zeile pro Auftrag in die Status-Tabelle schreiben."""
+        values = (
+            core.format_timestamp(entry.timestamp),
+            entry.action_label(),
+            entry.number,
+            entry.source,
+            entry.result_label(),
+        )
+        tags = () if entry.ok else ("failed",)
+        self.history_tree.insert("", index, values=values, tags=tags)
 
     def _set_window_icon(self) -> None:
         try:
@@ -315,10 +377,16 @@ class AutoPikettApp:
                 self._post("info", "Es läuft bereits ein Anruf.")
             return
 
+        source = "Manuell" if manual else "Zeitplan"
+        number = ""
+        ok = False
+        detail = ""
+
         try:
             with self._settings_lock:
                 on_number = self.settings.on_number
                 off_number = self.settings.off_number
+            number = on_number if action == ACTION_ON else off_number
 
             label = ACTION_LABELS[action]
             self._post(
@@ -338,6 +406,7 @@ class AutoPikettApp:
             if ok:
                 logger.info("Pikett %s umgeschaltet.", label)
             else:
+                detail = "kein Anruf gestartet"
                 message = f"Pikett {label}: kein Anruf konnte gestartet werden."
                 logger.error(message)
                 if manual:
@@ -345,6 +414,7 @@ class AutoPikettApp:
                 else:
                     self._post("status", message)
         except Exception as error:
+            detail = str(error)
             logger.exception("Umschalten fehlgeschlagen")
             if manual:
                 self._post("error", f"Umschalten fehlgeschlagen:\n{error}")
@@ -352,6 +422,25 @@ class AutoPikettApp:
                 self._post("status", f"Umschalten fehlgeschlagen: {error}")
         finally:
             self._dial_lock.release()
+            self._record_history(action, number, source, ok, detail)
+
+    def _record_history(
+        self, action: str, number: str, source: str, ok: bool, detail: str
+    ) -> None:
+        """Einen Auftrag (nicht die einzelnen Anrufe) in der Tabelle festhalten."""
+        entry = core.HistoryEntry(
+            timestamp=datetime.now().isoformat(timespec="seconds"),
+            action=action,
+            number=number,
+            source=source,
+            ok=ok,
+            detail=detail,
+        )
+        try:
+            self.history = core.record_history(entry, path=self.history_file)
+        except OSError:
+            logger.exception("Status-Eintrag konnte nicht gespeichert werden")
+        self._post("history", entry)
 
     # --------------------------------------------------------
     # SYSTRAY
@@ -462,6 +551,8 @@ class AutoPikettApp:
         elif kind == "state":
             self._refresh_tray(bool(payload))
             self._refresh_status()
+        elif kind == "history":
+            self._insert_history_row(payload, index=0)  # type: ignore[arg-type]
         elif kind == "info":
             messagebox.showinfo(core.APP_NAME, str(payload))
         elif kind == "error":
