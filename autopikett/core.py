@@ -64,7 +64,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"

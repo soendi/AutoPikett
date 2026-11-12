@@ -114,8 +114,8 @@ class AutoPikettApp:
 
     def _build_ui(self) -> None:
         self.root.title(f"{core.APP_NAME} v{core.APP_VERSION}")
-        self.root.geometry("1200x820")
-        self.root.minsize(1040, 760)
+        self.root.geometry("1380x860")
+        self.root.minsize(1180, 760)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._set_window_icon()
 
@@ -398,7 +398,12 @@ class AutoPikettApp:
     def _build_holidays(self, parent: tk.Widget) -> None:
         """Rechts neben Mo-So die kommenden Feiertage des Kantons St. Gallen."""
         frame = ttk.LabelFrame(
-            parent, text="Feiertage Kanton St. Gallen", padding=8
+            parent,
+            text=(
+                "Feiertage Kanton St.Gallen - Automatische Pikett-Umschaltungen "
+                "werden an diesen Tagen übersprungen"
+            ),
+            padding=8,
         )
         frame.grid(
             row=0,
