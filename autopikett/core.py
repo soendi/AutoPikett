@@ -63,7 +63,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"
@@ -88,9 +88,12 @@ DEFAULT_ENABLED_DAYS = WEEKDAYS[:5]
 DEFAULT_TIMES = ("08:00", "12:00", "13:30", "17:00")
 DEFAULT_ACTIONS = (ACTION_OFF, ACTION_ON, ACTION_OFF, ACTION_ON)
 
-# Platzhalter, bis die echten Pikett-Nummern eingetragen sind.
-DEFAULT_ON_NUMBER = "079 000 00 01"
-DEFAULT_OFF_NUMBER = "079 000 00 02"
+# Die echten Pikett-Nummern. Steuercodes wie * und # gehören zur Nummer
+# und werden unverändert gewählt.
+DEFAULT_ON_NUMBER = "*21+41860812851990"
+DEFAULT_OFF_NUMBER = "#21"
+# Frühere Platzhalter, die in gespeicherten Einstellungen stecken können.
+LEGACY_PLACEHOLDER_NUMBERS = {"079 000 00 01", "079 000 00 02"}
 
 # Jede Umschaltung wird dreimal gewählt: wählen, 10 s warten, wählen,
 # 10 s warten, wählen.
@@ -242,6 +245,9 @@ def _clean_number(value: Any, fallback: str) -> str:
     if not isinstance(value, str):
         return fallback
     cleaned = value.strip()
+    # Alte Platzhalter gelten als "noch nicht eingetragen".
+    if cleaned in LEGACY_PLACEHOLDER_NUMBERS:
+        return fallback
     return cleaned or fallback
 
 

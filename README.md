@@ -36,9 +36,16 @@ Montag bis Freitag aktiv, Samstag und Sonntag aus. Alle Tage starten mit:
 | 13:30 | Aus  |
 | 17:00 | Ein  |
 
-Als Nummern sind Platzhalter hinterlegt (`079 000 00 01` für Ein,
-`079 000 00 02` für Aus). Diese im Fenster durch die echten Pikett-Nummern
-ersetzen und speichern.
+Hinterlegt sind die echten Pikett-Nummern:
+
+| Ziel | Nummer                |
+|------|-----------------------|
+| Ein  | `*21+41860812851990`  |
+| Aus  | `#21`                 |
+
+Die Nummern werden Zeichen für Zeichen ins Wählfeld geschrieben - `*`,
+`#` und `+` gehören zur Nummer und werden mitgeschickt, nicht nur die
+Ziffern. Beide Nummern lassen sich im Fenster ändern.
 
 ## Autostart
 

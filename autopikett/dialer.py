@@ -33,9 +33,42 @@ class DialError(RuntimeError):
     """Der Anruf konnte nicht gestartet werden."""
 
 
+# Zeichen, die im Wählfeld als Steuercode zählen und deshalb erhalten bleiben.
+KEEP_CHARS_RE = re.compile(r"[^\d*#+]")
+
+# pywinauto deutet diese Zeichen in type_keys als Sondertasten.
+TYPE_KEYS_SPECIAL = {
+    "+": "{+}",
+    "^": "{^}",
+    "%": "{%}",
+    "~": "{~}",
+    "(": "{(}",
+    ")": "{)}",
+    "[": "{[}",
+    "]": "{]}",
+}
+
+
+def _for_type_keys(text: str) -> str:
+    """Text so maskieren, dass ``type_keys`` jedes Zeichen wörtlich tippt."""
+    return "".join(TYPE_KEYS_SPECIAL.get(char, char) for char in text)
+
+
 def to_dial_number(number: str) -> str:
-    """Nummer in der Form für das Wählfeld (national, z. B. 0790000001)."""
-    digits = re.sub(r"\D", "", number or "")
+    """Nummer in der Form für das Wählfeld.
+
+    Steuerzeichen wie ``*``, ``#`` und ``+`` bleiben erhalten, damit
+    ``*21+41860812851990`` genau so gewählt wird. Nur reine
+    Telefonnummern werden auf die nationale Form gebracht (0790000001).
+    """
+    cleaned = KEEP_CHARS_RE.sub("", number or "")
+    if not cleaned:
+        return ""
+    # Steuercodes: alles so wählen, wie es dasteht.
+    if any(char in cleaned for char in "*#"):
+        return cleaned
+
+    digits = cleaned.replace("+", "")
     if digits.startswith("0041"):
         digits = "0" + digits[4:]
     elif digits.startswith("41") and len(digits) == 11:
@@ -79,7 +112,7 @@ def dial_number(number: str, window_title: str = WINDOW_TITLE) -> str:
     except Exception:
         try:
             dial_field.click_input()
-            dial_field.type_keys(dialed_number, with_spaces=False)
+            dial_field.type_keys(_for_type_keys(dialed_number), with_spaces=False)
         except Exception as error:
             raise DialError(f"Nummer konnte nicht eingetragen werden: {error}") from error
 

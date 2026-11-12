@@ -190,10 +190,39 @@ def test_state_label() -> None:
         ("0041 79 000 00 01", "0790000001"),
         ("41790000001", "0790000001"),
         ("", ""),
+        # Steuercodes bleiben vollständig erhalten.
+        ("*21+41860812851990", "*21+41860812851990"),
+        ("#21", "#21"),
+        (" *21+41 860 812 851 990 ", "*21+41860812851990"),
     ],
 )
 def test_to_dial_number(raw: str, expected: str) -> None:
     assert dialer.to_dial_number(raw) == expected
+
+
+def test_default_numbers_are_dialed_unchanged() -> None:
+    settings = core.default_settings()
+    assert settings.on_number == "*21+41860812851990"
+    assert settings.off_number == "#21"
+    assert dialer.to_dial_number(settings.on_number) == "*21+41860812851990"
+    assert dialer.to_dial_number(settings.off_number) == "#21"
+
+
+def test_old_placeholder_numbers_fall_back_to_real_numbers(tmp_path) -> None:
+    target = tmp_path / "settings.json"
+    target.write_text(
+        json.dumps({"on_number": "079 000 00 01", "off_number": "079 000 00 02"}),
+        encoding="utf-8",
+    )
+    loaded = core.load_settings(target)
+
+    assert loaded.on_number == core.DEFAULT_ON_NUMBER
+    assert loaded.off_number == core.DEFAULT_OFF_NUMBER
+
+
+def test_type_keys_keeps_control_characters_literal() -> None:
+    assert dialer._for_type_keys("*21+41860812851990") == "*21{+}41860812851990"
+    assert dialer._for_type_keys("#21") == "#21"
 
 
 def test_switch_pikett_dials_three_times_with_ten_second_pauses() -> None:
