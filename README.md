@@ -19,8 +19,9 @@ drücken - per `pywinauto`.
   (`geo=1903`, `klasse=3` = nur gesetzlich anerkannte Feiertage); der Export wird
   wöchentlich neu geholt, im Benutzerordner zwischengespeichert und beim Start,
   bei jedem Tageswechsel und über "Aktualisieren" angezeigt; der betroffene
-  Wochentag steht dann rot im Fenster. Ohne Internet gilt die zuletzt
-  gespeicherte Datei
+  Wochentag steht dann rot im Fenster. Unter der Liste steht, wann die CSV
+  zuletzt heruntergeladen wurde. Ist der Abruf gesperrt oder offline, gilt
+  ohne Meldung die zuletzt gespeicherte Datei samt ihrem Datum
 - an diesen Feiertagen fallen die geplanten Umschaltungen aus (manuelles Schalten
   bleibt möglich); der nächste Wechsel im Status überspringt sie ebenfalls.
   Einzelne Tage ausblenden entfällt: nicht anerkannte Tage wie der Berchtoldstag

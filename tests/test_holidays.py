@@ -172,6 +172,30 @@ def test_blocked_download_keeps_the_stored_list(tmp_path, monkeypatch) -> None:
     assert "Neujahr" in cache.read_text(encoding="utf-8")
 
 
+def test_cache_saved_at_is_the_download_time(tmp_path) -> None:
+    cache = tmp_path / "holidays.csv"
+    assert holidays.cache_saved_at(cache) is None
+
+    cache.write_text(CSV_TEXT, encoding="utf-8")
+    stamp = datetime(2026, 11, 9, 7, 15)
+    os.utime(cache, (stamp.timestamp(), stamp.timestamp()))
+
+    assert holidays.cache_saved_at(cache) == stamp
+
+
+def test_blocked_refresh_keeps_the_download_time(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "holidays.csv"
+    cache.write_text(CSV_TEXT, encoding="utf-8")
+    stamp = datetime(2026, 11, 2, 6, 30)
+    os.utime(cache, (stamp.timestamp(), stamp.timestamp()))
+    _fake_download(monkeypatch, BLOCKED_TEXT)
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache, force=True)
+
+    assert found is not None
+    assert holidays.cache_saved_at(cache) == stamp
+
+
 def test_without_cache_and_network_there_is_no_list(tmp_path, monkeypatch) -> None:
     def broken(request, timeout=None):  # noqa: ANN001 - Testdouble
         raise holidays.urllib.error.URLError("kein Netz")

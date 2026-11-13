@@ -30,6 +30,7 @@ __all__ = [
     "CACHE_MAX_AGE_DAYS",
     "Holiday",
     "cache_path",
+    "cache_saved_at",
     "fetch_holidays",
     "milliseconds_until_midnight",
     "parse_csv",
@@ -73,6 +74,15 @@ class Holiday:
 def cache_path() -> Path:
     """Ablage des zuletzt geladenen Exports im Benutzerordner."""
     return user_data_dir() / CACHE_NAME
+
+
+def cache_saved_at(cache: Path | None = None) -> datetime | None:
+    """Wann die gespeicherte CSV geschrieben wurde, also der letzte Download."""
+    target = Path(cache) if cache is not None else cache_path()
+    try:
+        return datetime.fromtimestamp(target.stat().st_mtime)
+    except OSError:
+        return None
 
 
 def _parse_csv_date(value: str) -> date | None:

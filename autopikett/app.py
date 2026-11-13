@@ -518,7 +518,13 @@ class AutoPikettApp:
         else:
             self.holidays_text.insert("end", "Keine Feiertage in den nächsten Wochen.")
         self.holidays_text.configure(state="disabled")
-        self.holidays_status_var.set(f"Stand {datetime.now():%d.%m.%Y %H:%M}")
+        # Nicht die Uhrzeit des Klicks, sondern wann die CSV zuletzt kam: nach
+        # einer Sperre bleibt die gespeicherte Datei samt ihrem Datum gültig.
+        saved = holidays.cache_saved_at()
+        if saved is None:
+            self.holidays_status_var.set("CSV nicht gespeichert")
+        else:
+            self.holidays_status_var.set(f"CSV vom {saved:%d.%m.%Y %H:%M}")
         self._holidays_ready.set()
 
         # Der nächste Wechsel kann sich durch einen Feiertag verschieben.
