@@ -2,113 +2,208 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+import os
+from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from autopikett import holidays
 
 TODAY = date(2026, 11, 12)
 
-SAMPLE = [
-    {
-        "id": "a",
-        "startDate": "2026-12-25",
-        "endDate": "2026-12-25",
-        "type": "Public",
-        "name": [{"language": "DE", "text": "Weihnachten"}],
-    },
-    {
-        "id": "b",
-        "startDate": "2026-11-01",
-        "endDate": "2026-11-01",
-        "type": "Public",
-        "name": [
-            {"language": "EN", "text": "All Saints' Day"},
-            {"language": "DE", "text": "Allerheiligen"},
-        ],
-    },
-    {
-        "id": "c",
-        "startDate": "2026-12-26",
-        "endDate": "2026-12-26",
-        "type": "Public",
-        "name": [{"language": "DE", "text": "Stephanstag"}],
-    },
-]
+CSV_TEXT = (
+    '\ufeff"Datum";"Bezeichnung";"Wochentag";"Kalenderwoche"\r\n'
+    '"01.01.2026";"Neujahr";"Do.";"Woche 01"\r\n'
+    '"03.04.2026";"Karfreitag";"Fr.";"Woche 14"\r\n'
+    '"25.12.2026";"Weihnachten";"Fr.";"Woche 52"\r\n'
+    '"26.12.2026";"Stephanstag";"Sa.";"Woche 52"\r\n'
+)
+
+BLOCKED_TEXT = (
+    "Feiertagskalender.ch: Datenausgabe blockiert: zu viele Downloads "
+    "für private Nutzung. Bitte versuchen Sie es später noch einmal.\r\n"
+)
 
 
-def test_parse_holidays_prefers_german_names_and_sorts() -> None:
-    parsed = holidays.parse_holidays(SAMPLE)
+class FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+
+def _fake_download(monkeypatch, body: str = CSV_TEXT) -> dict[str, str]:
+    seen: dict[str, str] = {}
+
+    def fake_urlopen(request, timeout=None):  # noqa: ANN001 - Testdouble
+        seen["url"] = request.full_url
+        return FakeResponse(body.encode("utf-8"))
+
+    monkeypatch.setattr(holidays.urllib.request, "urlopen", fake_urlopen)
+    return seen
+
+
+def _offline(monkeypatch) -> None:
+    def broken(request, timeout=None):  # noqa: ANN001 - Testdouble
+        raise AssertionError("Ohne gültigen Zwischenspeicher darf geladen werden")
+
+    monkeypatch.setattr(holidays.urllib.request, "urlopen", broken)
+
+
+def _age(path: Path, days: int) -> None:
+    stamp = (datetime.now() - timedelta(days=days)).timestamp()
+    os.utime(path, (stamp, stamp))
+
+
+def test_parse_csv_reads_german_dates_and_sorts(tmp_path) -> None:
+    parsed = holidays.parse_csv(CSV_TEXT)
 
     assert [holiday.day for holiday in parsed] == [
-        date(2026, 11, 1),
+        date(2026, 1, 1),
+        date(2026, 4, 3),
         date(2026, 12, 25),
         date(2026, 12, 26),
     ]
-    assert parsed[0].name == "Allerheiligen"
+    assert parsed[2].name == "Weihnachten"
 
 
-def test_berchtoldstag_is_not_a_sunday_equivalent_holiday() -> None:
-    parsed = holidays.parse_holidays(
-        [
-            {
-                "startDate": "2027-01-02",
-                "name": [{"language": "DE", "text": "Berchtoldstag"}],
-            },
-            {
-                "startDate": "2027-01-01",
-                "name": [{"language": "DE", "text": "Neujahrstag"}],
-            },
-            {
-                "startDate": "2027-12-26",
-                "name": [{"language": "DE", "text": "Stephanstag"}],
-            },
-        ]
-    )
-
-    assert [holiday.name for holiday in parsed] == ["Neujahrstag", "Stephanstag"]
-    assert holidays.is_sunday_equivalent("Berchtoldstag") is False
-    assert holidays.is_sunday_equivalent("Allerheiligen") is True
-
-
-def test_parse_holidays_skips_broken_entries() -> None:
-    parsed = holidays.parse_holidays(
-        [
-            "kaputt",
-            {"startDate": "kein Datum", "name": [{"language": "DE", "text": "X"}]},
-            {"startDate": "2027-01-01", "name": []},
-            {"startDate": "2027-01-02", "name": "Neujahrstag"},
-        ]
+def test_parse_csv_skips_header_and_broken_rows() -> None:
+    parsed = holidays.parse_csv(
+        '"Datum";"Bezeichnung";"Wochentag";"Kalenderwoche"\r\n'
+        '"kaputt";"X";"Mo.";"Woche 01"\r\n'
+        '"01.01.2026";"";"Do.";"Woche 01"\r\n'
+        '"32.01.2026";"Unsinn";"Sa.";"Woche 05"\r\n'
+        '"01.01.2026";"Neujahr";"Do.";"Woche 01"\r\n'
+        '"01.01.2026";"Neujahr";"Do.";"Woche 01"\r\n'
     )
 
     assert [(holiday.day, holiday.name) for holiday in parsed] == [
-        (date(2027, 1, 2), "Neujahrstag")
+        (date(2026, 1, 1), "Neujahr")
     ]
-    assert holidays.parse_holidays(None) == []
-    assert holidays.parse_holidays({}) == []
+    assert holidays.parse_csv("") == []
+
+
+def test_export_detection_rejects_block_message() -> None:
+    assert holidays.is_export(CSV_TEXT) is True
+    assert holidays.is_export(BLOCKED_TEXT) is False
+
+
+def test_fresh_cache_is_used_without_network(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "holidays.csv"
+    cache.write_text(CSV_TEXT, encoding="utf-8")
+    _offline(monkeypatch)
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
+
+
+def test_download_stores_cache_and_asks_for_balgach(tmp_path, monkeypatch) -> None:
+    seen = _fake_download(monkeypatch)
+    cache = tmp_path / "holidays.csv"
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
+    assert "geo=1903" in seen["url"]
+    assert "klasse=3" in seen["url"]
+    assert cache.exists()
+    assert "Weihnachten" in cache.read_text(encoding="utf-8")
+
+
+def test_holidays_outside_the_window_are_dropped(tmp_path, monkeypatch) -> None:
+    text = CSV_TEXT + '"01.01.2029";"Neujahr";"Mo.";"Woche 01"\r\n'
+    _fake_download(monkeypatch, text)
+    cache = tmp_path / "holidays.csv"
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache, days=60)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
+
+
+def test_cache_older_than_a_week_is_refreshed(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "holidays.csv"
+    cache.write_text(
+        CSV_TEXT.replace('"26.12.2026";"Stephanstag";"Sa.";"Woche 52"\r\n', ""),
+        encoding="utf-8",
+    )
+    _age(cache, holidays.CACHE_MAX_AGE_DAYS + 1)
+    _fake_download(monkeypatch)
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
+
+
+def test_refresh_ignores_a_fresh_cache(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "holidays.csv"
+    cache.write_text(
+        CSV_TEXT.replace('"26.12.2026";"Stephanstag";"Sa.";"Woche 52"\r\n', ""),
+        encoding="utf-8",
+    )
+    _fake_download(monkeypatch)
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache, force=True)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
+
+
+def test_blocked_download_keeps_the_stored_list(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "holidays.csv"
+    cache.write_text(CSV_TEXT, encoding="utf-8")
+    _age(cache, holidays.CACHE_MAX_AGE_DAYS + 1)
+    _fake_download(monkeypatch, BLOCKED_TEXT)
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
+    assert "Neujahr" in cache.read_text(encoding="utf-8")
+
+
+def test_without_cache_and_network_there_is_no_list(tmp_path, monkeypatch) -> None:
+    def broken(request, timeout=None):  # noqa: ANN001 - Testdouble
+        raise holidays.urllib.error.URLError("kein Netz")
+
+    monkeypatch.setattr(holidays.urllib.request, "urlopen", broken)
+
+    assert holidays.fetch_holidays(today=TODAY, cache=tmp_path / "leer.csv") is None
 
 
 def test_pick_upcoming_drops_past_days_and_limits() -> None:
-    parsed = holidays.parse_holidays(SAMPLE)
+    parsed = holidays.parse_csv(CSV_TEXT)
 
     upcoming = holidays.pick_upcoming(parsed, today=TODAY)
     assert [holiday.name for holiday in upcoming] == ["Weihnachten", "Stephanstag"]
 
-    assert [holiday.name for holiday in holidays.pick_upcoming(parsed, today=TODAY, limit=1)] == [
-        "Weihnachten"
-    ]
+    assert [
+        holiday.name
+        for holiday in holidays.pick_upcoming(parsed, today=TODAY, limit=1)
+    ] == ["Weihnachten"]
     # Ein Feiertag am heutigen Tag bleibt sichtbar, vergangene Tage nicht.
-    assert [holiday.name for holiday in holidays.pick_upcoming(parsed, today=date(2026, 11, 1))] == [
-        "Allerheiligen",
-        "Weihnachten",
-        "Stephanstag",
-    ]
+    assert [
+        holiday.name
+        for holiday in holidays.pick_upcoming(parsed, today=date(2026, 12, 26))
+    ] == ["Stephanstag"]
     assert holidays.pick_upcoming(parsed, today=date(2027, 1, 1)) == []
 
 
 def test_milliseconds_until_midnight() -> None:
     # 23:59 -> eine Minute bis Mitternacht plus 90 s Reserve.
     assert (
-        holidays.milliseconds_until_midnight(datetime(2026, 11, 12, 23, 59, 0)) == 150_000
+        holidays.milliseconds_until_midnight(datetime(2026, 11, 12, 23, 59, 0))
+        == 150_000
     )
     # 08:00 -> noch fast ein ganzer Tag.
     assert (
@@ -123,48 +218,10 @@ def test_label_shows_weekday_and_date() -> None:
 
 
 def test_upcoming_holidays_uses_injected_fetch() -> None:
-    parsed = holidays.parse_holidays(SAMPLE)
+    parsed = holidays.parse_csv(CSV_TEXT)
 
-    found = holidays.upcoming_holidays(
-        today=TODAY, fetch=lambda **_: parsed
-    )
+    found = holidays.upcoming_holidays(today=TODAY, fetch=lambda **_: parsed)
     assert found is not None
     assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
 
     assert holidays.upcoming_holidays(today=TODAY, fetch=lambda **_: None) is None
-
-
-def test_query_asks_for_canton_st_gallen(monkeypatch) -> None:
-    seen: dict[str, str] = {}
-
-    class FakeResponse:
-        def read(self) -> bytes:
-            return b"[]"
-
-        def __enter__(self) -> "FakeResponse":
-            return self
-
-        def __exit__(self, *_: object) -> None:
-            return None
-
-    def fake_urlopen(request, timeout=None):  # noqa: ANN001 - Testdouble
-        seen["url"] = request.full_url
-        return FakeResponse()
-
-    monkeypatch.setattr(holidays.urllib.request, "urlopen", fake_urlopen)
-
-    assert holidays.fetch_holidays(today=TODAY) == []
-    url = seen["url"]
-    assert "countryIsoCode=CH" in url
-    assert "subdivisionCode=CH-SG" in url
-    assert "languageIsoCode=DE" in url
-    assert "validFrom=2026-11-12" in url
-    assert "validTo=2027-12-17" in url
-
-
-def test_fetch_holidays_returns_none_without_network(monkeypatch) -> None:
-    def broken(request, timeout=None):  # noqa: ANN001 - Testdouble
-        raise holidays.urllib.error.URLError("kein Netz")
-
-    monkeypatch.setattr(holidays.urllib.request, "urlopen", broken)
-    assert holidays.fetch_holidays(today=TODAY) is None

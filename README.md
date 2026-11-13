@@ -14,15 +14,16 @@ drücken - per `pywinauto`.
 - Fenster mit allen sieben Wochentagen als Checkbox
 - vier frei einstellbare Zeiten pro Tag, je mit Ziel **Ein** oder **Aus**
 - zwei Nummern: eine für "Pikett einschalten", eine für "Pikett ausschalten"
-- rechts neben den Wochentagen die nächsten Feiertage des Kantons St. Gallen,
-  live von der [OpenHolidays API](https://www.openholidaysapi.org/) geladen
-  (beim Start, bei jedem Tageswechsel und über "Aktualisieren"); vergangene
-  Tage verschwinden, ohne Internet zeigt die Liste einen Hinweis
-- an Feiertagen des Kantons St. Gallen fallen die geplanten Umschaltungen aus;
-  gezählt werden nur Tage, die einem Sonntag gleichgestellt sind (der
-  Berchtoldstag am 2. Januar also nicht)
-  (manuelles Schalten bleibt möglich); der nächste Wechsel im Status überspringt
-  Feiertage ebenfalls
+- rechts neben den Wochentagen die nächsten Feiertage von Balgach (SG), aus dem
+  Klassen-Export von [feiertagskalender.ch](https://www.feiertagskalender.ch/)
+  (`geo=1903`, `klasse=3` = nur gesetzlich anerkannte Feiertage); der Export wird
+  wöchentlich neu geholt, im Benutzerordner zwischengespeichert und beim Start,
+  bei jedem Tageswechsel und über "Aktualisieren" angezeigt. Ohne Internet gilt
+  die zuletzt gespeicherte Datei
+- an diesen Feiertagen fallen die geplanten Umschaltungen aus (manuelles Schalten
+  bleibt möglich); der nächste Wechsel im Status überspringt sie ebenfalls.
+  Einzelne Tage ausblenden entfällt: nicht anerkannte Tage wie der Berchtoldstag
+  sind im Export gar nicht enthalten
 - jede Umschaltung wird dreimal gewählt (wählen, 10 s warten, wählen,
   10 s warten, wählen), damit das Pikett sicher umgeschaltet ist
 - Status-Tabelle im Fenster: ein Eintrag pro Auftrag mit Zeit, Auftrag,

@@ -409,11 +409,11 @@ class AutoPikettApp:
         self._refresh_status()
 
     def _build_holidays(self, parent: tk.Widget) -> None:
-        """Rechts neben Mo-So die kommenden Feiertage des Kantons St. Gallen."""
+        """Rechts neben Mo-So die kommenden Feiertage von Balgach (SG)."""
         frame = ttk.LabelFrame(
             parent,
             text=(
-                "Feiertage Kanton St.Gallen - Automatische Pikett-Umschaltungen "
+                "Feiertage Balgach (SG) - Automatische Pikett-Umschaltungen "
                 "werden an diesen Tagen übersprungen"
             ),
             padding=8,
@@ -432,9 +432,9 @@ class AutoPikettApp:
         ttk.Label(head, text="die nächsten Termine", foreground="#666666").pack(
             side="left"
         )
-        ttk.Button(head, text="Aktualisieren", command=self._load_holidays).pack(
-            side="right"
-        )
+        ttk.Button(
+            head, text="Aktualisieren", command=lambda: self._load_holidays(refresh=True)
+        ).pack(side="right")
 
         self.holidays_text = tk.Text(
             frame,
@@ -455,17 +455,22 @@ class AutoPikettApp:
             foreground="#666666",
         ).pack(fill="x", pady=(4, 0))
 
-    def _load_holidays(self) -> None:
-        """Feiertage im Hintergrund laden, damit das Fenster nicht hängt."""
+    def _load_holidays(self, refresh: bool = False) -> None:
+        """Feiertage im Hintergrund laden, damit das Fenster nicht hängt.
+
+        ``refresh`` holt den Export neu, statt die Wochendatei zu verwenden.
+        """
         if self._holidays_loading:
             return
         self._holidays_loading = True
         self.holidays_status_var.set("lade …")
-        threading.Thread(target=self._fetch_holidays, daemon=True).start()
+        threading.Thread(
+            target=self._fetch_holidays, args=(refresh,), daemon=True
+        ).start()
 
-    def _fetch_holidays(self) -> None:
+    def _fetch_holidays(self, refresh: bool = False) -> None:
         try:
-            found = holidays.fetch_holidays()
+            found = holidays.fetch_holidays(force=refresh)
         except Exception:  # noqa: BLE001 - die Liste darf die App nicht stören
             logger.exception("Feiertage konnten nicht geladen werden")
             found = None
