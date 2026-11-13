@@ -18,7 +18,9 @@ drücken - per `pywinauto`.
   live von der [OpenHolidays API](https://www.openholidaysapi.org/) geladen
   (beim Start, bei jedem Tageswechsel und über "Aktualisieren"); vergangene
   Tage verschwinden, ohne Internet zeigt die Liste einen Hinweis
-- an Feiertagen des Kantons St. Gallen fallen die geplanten Umschaltungen aus
+- an Feiertagen des Kantons St. Gallen fallen die geplanten Umschaltungen aus;
+  gezählt werden nur Tage, die einem Sonntag gleichgestellt sind (der
+  Berchtoldstag am 2. Januar also nicht)
   (manuelles Schalten bleibt möglich); der nächste Wechsel im Status überspringt
   Feiertage ebenfalls
 - jede Umschaltung wird dreimal gewählt (wählen, 10 s warten, wählen,

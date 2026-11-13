@@ -21,6 +21,7 @@ from autopikett.core import USER_AGENT
 __all__ = [
     "Holiday",
     "fetch_holidays",
+    "is_sunday_equivalent",
     "milliseconds_until_midnight",
     "parse_holidays",
     "pick_upcoming",
@@ -38,6 +39,11 @@ MAX_DAYS_AHEAD = 400
 UPCOMING_LIMIT = 6
 
 WEEKDAY_SHORT = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+# Die API führt auch Tage, die im Kanton St. Gallen normale Arbeitstage sind.
+# Die App schaltet nur an Tagen, die einem Sonntag gleichgestellt sind - der
+# Berchtoldstag (2. Januar) gehört nicht dazu.
+NOT_SUNDAY_EQUIVALENT = ("berchtoldstag",)
 
 logger = logging.getLogger("autopikett.holidays")
 
@@ -82,6 +88,12 @@ def _holiday_name(value: Any) -> str:
     return ""
 
 
+def is_sunday_equivalent(name: str) -> bool:
+    """Ist der Feiertag einem Sonntag gleichgestellt?"""
+    lowered = (name or "").casefold().strip()
+    return not any(lowered.startswith(prefix) for prefix in NOT_SUNDAY_EQUIVALENT)
+
+
 def parse_holidays(raw: Any) -> list[Holiday]:
     """Antwort der API in eine sortierte, eindeutige Feiertagsliste wandeln."""
     if not isinstance(raw, list):
@@ -93,7 +105,7 @@ def parse_holidays(raw: Any) -> list[Holiday]:
             continue
         day = _parse_date(item.get("startDate"))
         name = _holiday_name(item.get("name"))
-        if day is None or not name:
+        if day is None or not name or not is_sunday_equivalent(name):
             continue
         found[(day, name)] = Holiday(day, name)
 

@@ -47,18 +47,41 @@ def test_parse_holidays_prefers_german_names_and_sorts() -> None:
     assert parsed[0].name == "Allerheiligen"
 
 
+def test_berchtoldstag_is_not_a_sunday_equivalent_holiday() -> None:
+    parsed = holidays.parse_holidays(
+        [
+            {
+                "startDate": "2027-01-02",
+                "name": [{"language": "DE", "text": "Berchtoldstag"}],
+            },
+            {
+                "startDate": "2027-01-01",
+                "name": [{"language": "DE", "text": "Neujahrstag"}],
+            },
+            {
+                "startDate": "2027-12-26",
+                "name": [{"language": "DE", "text": "Stephanstag"}],
+            },
+        ]
+    )
+
+    assert [holiday.name for holiday in parsed] == ["Neujahrstag", "Stephanstag"]
+    assert holidays.is_sunday_equivalent("Berchtoldstag") is False
+    assert holidays.is_sunday_equivalent("Allerheiligen") is True
+
+
 def test_parse_holidays_skips_broken_entries() -> None:
     parsed = holidays.parse_holidays(
         [
             "kaputt",
             {"startDate": "kein Datum", "name": [{"language": "DE", "text": "X"}]},
             {"startDate": "2027-01-01", "name": []},
-            {"startDate": "2027-01-02", "name": "Berchtoldstag"},
+            {"startDate": "2027-01-02", "name": "Neujahrstag"},
         ]
     )
 
     assert [(holiday.day, holiday.name) for holiday in parsed] == [
-        (date(2027, 1, 2), "Berchtoldstag")
+        (date(2027, 1, 2), "Neujahrstag")
     ]
     assert holidays.parse_holidays(None) == []
     assert holidays.parse_holidays({}) == []
