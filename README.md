@@ -28,6 +28,11 @@ drücken - per `pywinauto`.
   inklusive Schaltfläche "Verlauf leeren"
 - Systray-Symbol mit Statuspunkt: **grün = Pikett ein**, **rot = Pikett aus**
 - Einstellungen liegen im Benutzerordner
+- prüft jede Minute, ob `enterprise_telephony.exe` läuft, und startet die
+  Software bei Bedarf selbst: zuerst am üblichen Ort
+  `C:\Program Files (x86)\Swisscom\Enterprise Telephony\enterprise_telephony.exe`,
+  sonst per Suche auf der Festplatte. Der gefundene Pfad wird in den
+  Einstellungen gemerkt, damit beim nächsten Mal nicht mehr gesucht wird
 - automatischer Start mit Windows, direkt in den Systray (`--tray`), damit
   der Zeitplan ohne offenes Fenster läuft - im Fenster abschaltbar
 - automatisches Selbst-Update über die GitHub-Releases

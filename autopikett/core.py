@@ -67,7 +67,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.6"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"
@@ -228,6 +228,8 @@ class Settings:
     pikett_on: bool = False
     auto_update: bool = True
     autostart: bool = True
+    # Gemerkter Pfad zu enterprise_telephony.exe (leer = noch nicht gefunden).
+    telephony_path: str = ""
     last_runs: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -238,6 +240,7 @@ class Settings:
             "pikett_on": self.pikett_on,
             "auto_update": self.auto_update,
             "autostart": self.autostart,
+            "telephony_path": self.telephony_path,
             "last_runs": dict(self.last_runs),
             "days": {day: plan.to_dict() for day, plan in self.days.items()},
         }
@@ -255,6 +258,12 @@ def _clean_number(value: Any, fallback: str) -> str:
     if cleaned in LEGACY_PLACEHOLDER_NUMBERS:
         return fallback
     return cleaned or fallback
+
+
+def _clean_path(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
 
 
 def _clean_runs(value: Any) -> dict[str, str]:
@@ -286,6 +295,7 @@ def settings_from_dict(data: Any) -> Settings:
         pikett_on=bool(data.get("pikett_on", False)),
         auto_update=bool(data.get("auto_update", True)),
         autostart=bool(data.get("autostart", True)),
+        telephony_path=_clean_path(data.get("telephony_path")),
         last_runs=_clean_runs(data.get("last_runs")),
     )
 

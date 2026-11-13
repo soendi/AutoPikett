@@ -75,6 +75,19 @@ def test_settings_roundtrip(tmp_path) -> None:
     assert loaded.days["Samstag"].enabled is False
 
 
+def test_telephony_path_is_remembered(tmp_path) -> None:
+    target = tmp_path / "settings.json"
+    exe = r"C:\Program Files (x86)\Swisscom\Enterprise Telephony\enterprise_telephony.exe"
+
+    settings = core.default_settings()
+    assert settings.telephony_path == ""
+
+    settings.telephony_path = exe
+    core.save_settings(settings, target)
+
+    assert core.load_settings(target).telephony_path == exe
+
+
 def test_missing_file_falls_back_to_defaults(tmp_path) -> None:
     loaded = core.load_settings(tmp_path / "nicht_da.json")
     assert loaded.to_dict() == core.default_settings().to_dict()

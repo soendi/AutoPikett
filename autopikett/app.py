@@ -15,7 +15,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 import tkinter as tk
 
-from autopikett import autostart, core, dialer, holidays
+from autopikett import autostart, core, dialer, holidays, telephony
 from autopikett.core import (
     ACTION_LABELS,
     ACTION_OFF,
@@ -32,6 +32,8 @@ CHECK_INTERVAL_S = 20
 EVENT_INTERVAL_MS = 150
 STARTUP_UPDATE_DELAY_MS = 5000
 INSTANCE_PORT = 49876
+# So oft wird geprüft, ob Enterprise Telephony noch läuft.
+TELEPHONY_CHECK_INTERVAL_S = 60
 
 
 def resource_path(*parts: str) -> Path:
@@ -84,6 +86,7 @@ class AutoPikettApp:
 
         self._settings_lock = threading.RLock()
         self._dial_lock = threading.Lock()
+        self._telephony_lock = threading.Lock()
         self._stop = threading.Event()
         self._events: queue.Queue[tuple[str, object]] = queue.Queue()
         self._tray = None
@@ -108,6 +111,8 @@ class AutoPikettApp:
         self.root.after(holidays.milliseconds_until_midnight(), self._holidays_tick)
 
         threading.Thread(target=self._scheduler_loop, daemon=True).start()
+        if sys.platform == "win32":
+            threading.Thread(target=self._telephony_loop, daemon=True).start()
 
     # --------------------------------------------------------
     # AUFBAU DER OBERFLÄCHE
@@ -570,6 +575,21 @@ class AutoPikettApp:
             number = on_number if action == ACTION_ON else off_number
 
             label = ACTION_LABELS[action]
+            self._post("status", "Enterprise Telephony wird geprüft …")
+
+            if not self._ensure_telephony():
+                detail = "Enterprise Telephony nicht bereit"
+                message = (
+                    f"Pikett {label}: Enterprise Telephony läuft nicht und konnte "
+                    "nicht gestartet werden."
+                )
+                logger.error(message)
+                if manual:
+                    self._post("error", message)
+                else:
+                    self._post("status", message)
+                return
+
             self._post(
                 "status",
                 f"Wähle Pikett {label} … ({core.HITS_PER_TRIGGER} Anrufe)",
@@ -604,6 +624,38 @@ class AutoPikettApp:
         finally:
             self._dial_lock.release()
             self._record_history(action, number, source, ok, detail)
+
+    # --------------------------------------------------------
+    # ENTERPRISE TELEPHONY
+    # --------------------------------------------------------
+
+    def _ensure_telephony(self) -> bool:
+        """Prüfen, ob Enterprise Telephony läuft, und sonst starten."""
+        # Nur eine Prüfung/Suche gleichzeitig (Systray, Anruf, Hintergrund).
+        with self._telephony_lock:
+            with self._settings_lock:
+                saved = self.settings.telephony_path
+
+            status = telephony.ensure_running(saved)
+
+            if status.path and status.path != saved:
+                with self._settings_lock:
+                    self.settings.telephony_path = status.path
+                    core.save_settings(self.settings, self.settings_file)
+                logger.info("Enterprise Telephony gemerkt: %s", status.path)
+
+            if not status.running:
+                logger.error("Enterprise Telephony nicht bereit: %s", status.message)
+            return status.running
+
+    def _telephony_loop(self) -> None:
+        """Enterprise Telephony am Laufen halten, damit Anrufe möglich sind."""
+        while not self._stop.is_set():
+            try:
+                self._ensure_telephony()
+            except Exception:  # noqa: BLE001 - darf die App nicht stoppen
+                logger.exception("Prüfung von Enterprise Telephony fehlgeschlagen")
+            self._stop.wait(TELEPHONY_CHECK_INTERVAL_S)
 
     def _record_history(
         self, action: str, number: str, source: str, ok: bool, detail: str
