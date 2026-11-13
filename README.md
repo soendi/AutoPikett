@@ -18,8 +18,9 @@ drücken - per `pywinauto`.
   Klassen-Export von [feiertagskalender.ch](https://www.feiertagskalender.ch/)
   (`geo=1903`, `klasse=3` = nur gesetzlich anerkannte Feiertage); der Export wird
   wöchentlich neu geholt, im Benutzerordner zwischengespeichert und beim Start,
-  bei jedem Tageswechsel und über "Aktualisieren" angezeigt. Ohne Internet gilt
-  die zuletzt gespeicherte Datei
+  bei jedem Tageswechsel und über "Aktualisieren" angezeigt; der betroffene
+  Wochentag steht dann rot im Fenster. Ohne Internet gilt die zuletzt
+  gespeicherte Datei
 - an diesen Feiertagen fallen die geplanten Umschaltungen aus (manuelles Schalten
   bleibt möglich); der nächste Wechsel im Status überspringt sie ebenfalls.
   Einzelne Tage ausblenden entfällt: nicht anerkannte Tage wie der Berchtoldstag

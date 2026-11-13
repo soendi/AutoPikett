@@ -33,6 +33,7 @@ __all__ = [
     "HISTORY_MAX_AGE_DAYS",
     "HistoryEntry",
     "history_cutoff",
+    "holiday_weekdays",
     "prune_history",
     "HITS_PER_TRIGGER",
     "Settings",
@@ -67,7 +68,7 @@ __all__ = [
 ]
 
 APP_NAME = "AutoPikett"
-APP_VERSION = "1.0.8"
+APP_VERSION = "1.0.9"
 
 # Quelle der Updates (GitHub-Releases dieses Repositories).
 GITHUB_REPO = "soendi/AutoPikett"
@@ -436,6 +437,17 @@ def next_event(
 
 def state_label(pikett_on: bool) -> str:
     return "Pikett EIN" if pikett_on else "Pikett AUS"
+
+
+def holiday_weekdays(days: Collection[date], today: date | None = None) -> set[str]:
+    """Wochentage, deren nächster Termin ein Feiertag ist.
+
+    Geprüft wird von heute bis in sechs Tagen - so kommt jeder Wochentag der
+    angezeigten Woche genau einmal vor.
+    """
+    today = today or date.today()
+    last = today + timedelta(days=6)
+    return {WEEKDAYS[day.weekday()] for day in days if today <= day <= last}
 
 
 # ============================================================

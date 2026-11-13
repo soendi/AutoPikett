@@ -547,3 +547,19 @@ def test_available_update_detects_newer_release(monkeypatch) -> None:
 def test_available_update_without_network(monkeypatch) -> None:
     monkeypatch.setattr(core, "fetch_latest_release", lambda *_, **__: None)
     assert core.available_update() is None
+
+
+def test_holiday_weekdays_marks_the_coming_week() -> None:
+    days = [datetime(2026, 11, 16).date(), datetime(2026, 11, 23).date()]
+
+    # Freitag bis Donnerstag: der Montag 16.11. liegt in der Woche.
+    assert core.holiday_weekdays(days, today=datetime(2026, 11, 13).date()) == {
+        "Montag"
+    }
+    # Ab Dienstag rückt der Montag 23.11. in die nächsten sieben Tage.
+    assert core.holiday_weekdays(days, today=datetime(2026, 11, 17).date()) == {
+        "Montag"
+    }
+    # Danach ist wieder alles normal.
+    assert core.holiday_weekdays(days, today=datetime(2026, 11, 24).date()) == set()
+    assert core.holiday_weekdays([], today=datetime(2026, 11, 13).date()) == set()

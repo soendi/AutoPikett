@@ -35,6 +35,9 @@ INSTANCE_PORT = 49876
 # So oft wird geprüft, ob Enterprise Telephony noch läuft.
 TELEPHONY_CHECK_INTERVAL_S = 60
 
+# Farbe für Wochentage, an denen der nächste Termin ein Feiertag ist.
+HOLIDAY_COLOR = "#c0392b"
+
 
 def resource_path(*parts: str) -> Path:
     """Pfad zu mitgelieferten Dateien (Entwicklung und PyInstaller-Build)."""
@@ -99,6 +102,8 @@ class AutoPikettApp:
         self.day_vars: dict[str, tk.BooleanVar] = {}
         self.time_vars: dict[str, list[tk.StringVar]] = {}
         self.action_vars: dict[str, list[tk.StringVar]] = {}
+        self.day_checks: dict[str, tk.Checkbutton] = {}
+        self._day_text_color = ""
 
         self._build_ui()
         self._setup_tray()
@@ -158,9 +163,22 @@ class AutoPikettApp:
 
             day_var = tk.BooleanVar(value=plan.enabled)
             self.day_vars[day] = day_var
-            ttk.Checkbutton(week, text=day, variable=day_var).grid(
-                row=row, column=0, sticky="w", pady=5, padx=(0, 18)
+            # tk statt ttk: nur so lässt sich die Schrift an Feiertagen rot färben.
+            check = tk.Checkbutton(
+                week,
+                text=day,
+                variable=day_var,
+                anchor="w",
+                justify="left",
+                background=self.root.cget("background"),
+                activebackground=self.root.cget("background"),
+                highlightthickness=0,
+                borderwidth=0,
             )
+            check.grid(row=row, column=0, sticky="w", pady=5, padx=(0, 18))
+            self.day_checks[day] = check
+            if not self._day_text_color:
+                self._day_text_color = str(check.cget("foreground"))
 
             self.time_vars[day] = []
             self.action_vars[day] = []
@@ -489,6 +507,8 @@ class AutoPikettApp:
         with self._settings_lock:
             self._holiday_days = frozenset(entry.day for entry in loaded)
 
+        self._mark_holiday_weekdays()
+
         upcoming = holidays.pick_upcoming(loaded)
         self.holidays_text.configure(state="normal")
         self.holidays_text.delete("1.0", "end")
@@ -504,9 +524,21 @@ class AutoPikettApp:
         # Der nächste Wechsel kann sich durch einen Feiertag verschieben.
         self._refresh_status()
 
+    def _mark_holiday_weekdays(self) -> None:
+        """Wochentage rot schreiben, deren nächster Termin ein Feiertag ist."""
+        with self._settings_lock:
+            days = self._holiday_days
+
+        marked = core.holiday_weekdays(days)
+        for day, check in self.day_checks.items():
+            color = HOLIDAY_COLOR if day in marked else self._day_text_color
+            check.configure(foreground=color, activeforeground=color)
+
     def _holidays_tick(self) -> None:
         """Beim Tageswechsel neu laden, damit vergangene Tage verschwinden."""
         self._load_holidays()
+        # Auch ohne neue Liste wandert die rote Markierung einen Tag weiter.
+        self._mark_holiday_weekdays()
         if not self._stop.is_set():
             self.root.after(
                 holidays.milliseconds_until_midnight(), self._holidays_tick
