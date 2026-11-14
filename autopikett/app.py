@@ -135,9 +135,6 @@ class AutoPikettApp:
 
         numbers = ttk.LabelFrame(outer, text="Telefonnummern", padding=12)
         numbers.pack(fill="x")
-        numbers.columnconfigure(1, weight=1)
-        numbers.columnconfigure(4, weight=1)
-
         # Die Nummernfelder sind gesperrt, bis man daneben «ändern» ankreuzt -
         # so wird eine Nummer nicht versehentlich verstellt.
         ttk.Label(numbers, text="Pikett EIN (einschalten):").grid(
@@ -147,7 +144,7 @@ class AutoPikettApp:
         self.on_number_entry = ttk.Entry(
             numbers, textvariable=self.on_number_var, width=26, state="readonly"
         )
-        self.on_number_entry.grid(row=0, column=1, sticky="w", padx=(8, 8))
+        self.on_number_entry.grid(row=0, column=1, sticky="w", padx=(8, 4))
 
         self.on_number_edit = tk.BooleanVar(value=False)
         ttk.Checkbutton(
@@ -166,7 +163,7 @@ class AutoPikettApp:
         self.off_number_entry = ttk.Entry(
             numbers, textvariable=self.off_number_var, width=26, state="readonly"
         )
-        self.off_number_entry.grid(row=0, column=4, sticky="w", padx=(8, 8))
+        self.off_number_entry.grid(row=0, column=4, sticky="w", padx=(8, 4))
 
         self.off_number_edit = tk.BooleanVar(value=False)
         ttk.Checkbutton(
@@ -496,7 +493,7 @@ class AutoPikettApp:
         self.holidays_text = tk.Text(
             frame,
             width=26,
-            height=8,
+            height=10,
             wrap="word",
             borderwidth=0,
             relief="flat",

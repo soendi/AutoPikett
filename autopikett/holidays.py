@@ -54,7 +54,7 @@ LANGUAGE = "de"
 # So weit im Voraus wird die Liste geführt.
 MAX_DAYS_AHEAD = 400
 # So viele Termine zeigt die Liste im Fenster.
-UPCOMING_LIMIT = 6
+UPCOMING_LIMIT = 8
 # So lange wird der Export aus dem Benutzerordner verwendet.
 CACHE_MAX_AGE_DAYS = 7
 CACHE_NAME = "holidays.csv"
