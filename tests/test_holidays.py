@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -194,6 +195,85 @@ def test_blocked_refresh_keeps_the_download_time(tmp_path, monkeypatch) -> None:
 
     assert found is not None
     assert holidays.cache_saved_at(cache) == stamp
+
+
+def _nager_body(year: int) -> str:
+    return json.dumps(
+        [
+            {
+                "date": f"{year}-01-01",
+                "localName": "Neujahr",
+                "counties": None,
+                "types": ["Public"],
+            },
+            {
+                "date": f"{year}-11-01",
+                "localName": "Allerheiligen",
+                "counties": ["CH-SG"],
+                "types": ["Public"],
+            },
+            {
+                "date": f"{year}-09-20",
+                "localName": "Bettag",
+                "counties": ["CH-SG"],
+                "types": ["Observance"],
+            },
+            {
+                "date": f"{year}-05-01",
+                "localName": "Tag der Arbeit",
+                "counties": ["CH-ZH"],
+                "types": ["Public"],
+            },
+        ]
+    )
+
+
+def _fake_sources(monkeypatch, *, nager: bool = True) -> dict[str, int]:
+    """Export liefert die Sperrseite; Nager.Date antwortet mit JSON."""
+    calls = {"fcal": 0, "nager": 0}
+
+    def fake_urlopen(request, timeout=None):  # noqa: ANN001 - Testdouble
+        url = request.full_url
+        if "fcal.ch" in url:
+            calls["fcal"] += 1
+            return FakeResponse(BLOCKED_TEXT.encode("utf-8"))
+        calls["nager"] += 1
+        if not nager:
+            raise holidays.urllib.error.URLError("kein Netz")
+        year = int(url.rstrip("/").split("/")[-2])
+        return FakeResponse(_nager_body(year).encode("utf-8"))
+
+    monkeypatch.setattr(holidays.urllib.request, "urlopen", fake_urlopen)
+    return calls
+
+
+def test_blocked_export_falls_back_to_nager(tmp_path, monkeypatch) -> None:
+    calls = _fake_sources(monkeypatch)
+    cache = tmp_path / "holidays.csv"
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache)
+
+    assert calls == {"fcal": 1, "nager": 2}
+    assert found is not None
+    assert [(holiday.day.isoformat(), holiday.name) for holiday in found] == [
+        ("2027-01-01", "Neujahr"),
+        ("2027-11-01", "Allerheiligen"),
+    ]
+    # Die Ersatzliste liegt im gleichen Speicher und gilt eine Woche.
+    assert "Allerheiligen" in cache.read_text(encoding="utf-8")
+    assert holidays.cache_saved_at(cache) is not None
+
+
+def test_both_sources_failing_keeps_the_stored_file(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "holidays.csv"
+    cache.write_text(CSV_TEXT, encoding="utf-8")
+    _age(cache, holidays.CACHE_MAX_AGE_DAYS + 1)
+    _fake_sources(monkeypatch, nager=False)
+
+    found = holidays.fetch_holidays(today=TODAY, cache=cache)
+
+    assert found is not None
+    assert [holiday.name for holiday in found] == ["Weihnachten", "Stephanstag"]
 
 
 def test_without_cache_and_network_there_is_no_list(tmp_path, monkeypatch) -> None:

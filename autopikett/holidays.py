@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 import urllib.error
 import urllib.parse
@@ -39,6 +40,11 @@ __all__ = [
 ]
 
 CSV_URL = "https://fcal.ch/privat/fcal_holidays_csv.php"
+# Ersatzquelle, falls der Export gesperrt ist (kein Schlüssel, keine Sperre).
+NAGER_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/CH"
+# Nager.Date kennt keine Gemeinden; landesweit plus Kanton St. Gallen ergibt
+# für Balgach genau die gesetzlichen Feiertage.
+CANTON_CODE = "CH-SG"
 # Ortschaft Balgach (SG) bei feiertagskalender.ch.
 GEO_ID = "1903"
 # 3 = gesetzlich anerkannte Feiertage (ohne nicht anerkannte, z. B. Berchtoldstag).
@@ -191,6 +197,50 @@ def _download(timeout: float) -> str | None:
     return text
 
 
+def _to_csv(rows: Iterable[tuple[date, str]]) -> str:
+    """Feiertage im Format des Exports schreiben, damit der Parser gilt."""
+    lines = ['"Datum";"Bezeichnung";"Wochentag";"Kalenderwoche"']
+    for day, name in sorted(set(rows)):
+        short = WEEKDAY_SHORT[day.weekday()]
+        week = day.isocalendar()[1]
+        lines.append(
+            f'"{day:%d.%m.%Y}";"{name}";"{short}.";"Woche {week:02d}"'
+        )
+    return "\r\n".join(lines) + "\r\n"
+
+
+def _download_nager(years: Iterable[int], timeout: float) -> str | None:
+    """Ersatzquelle: die Schweizer Feiertage von Nager.Date als CSV."""
+    rows: list[tuple[date, str]] = []
+    for year in years:
+        request = urllib.request.Request(
+            NAGER_URL.format(year=year),
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            logger.warning("Feiertage auch bei Nager.Date nicht erhältlich: %s", error)
+            return None
+
+        for item in data if isinstance(data, list) else []:
+            counties = item.get("counties")
+            if counties is not None and CANTON_CODE not in counties:
+                continue
+            if "Public" not in (item.get("types") or []):
+                continue
+            name = str(item.get("localName") or item.get("name") or "").strip()
+            try:
+                day = date.fromisoformat(str(item.get("date")))
+            except ValueError:
+                continue
+            if name:
+                rows.append((day, name))
+
+    return _to_csv(rows) if rows else None
+
+
 def fetch_holidays(
     today: date | None = None,
     days: int = MAX_DAYS_AHEAD,
@@ -216,6 +266,10 @@ def fetch_holidays(
         stored = None
 
     loaded = _download(timeout)
+    if loaded is None:
+        # Gesperrt (zu viele Downloads, Bot-Schutz) oder offline: die zweite,
+        # schlüsselfreie Quelle versuchen, bevor die alte Datei gilt.
+        loaded = _download_nager((now.year, now.year + 1), timeout)
     if loaded is not None:
         _write_cache(target, loaded)
         return _in_window(parse_csv(loaded), today, days)

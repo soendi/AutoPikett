@@ -20,8 +20,10 @@ drücken - per `pywinauto`.
   wöchentlich neu geholt, im Benutzerordner zwischengespeichert und beim Start,
   bei jedem Tageswechsel und über "Aktualisieren" angezeigt; der betroffene
   Wochentag steht dann rot im Fenster. Unter der Liste steht, wann die CSV
-  zuletzt heruntergeladen wurde. Ist der Abruf gesperrt oder offline, gilt
-  ohne Meldung die zuletzt gespeicherte Datei samt ihrem Datum
+  zuletzt heruntergeladen wurde. Ist der Export gesperrt, kommen dieselben
+  gesetzlichen Tage schlüsselfrei von [Nager.Date](https://date.nager.at/)
+  (landesweit plus Kanton SG); erst wenn auch das scheitert oder offline ist,
+  gilt ohne Meldung die zuletzt gespeicherte Datei samt ihrem Datum
 - an diesen Feiertagen fallen die geplanten Umschaltungen aus (manuelles Schalten
   bleibt möglich); der nächste Wechsel im Status überspringt sie ebenfalls.
   Einzelne Tage ausblenden entfällt: nicht anerkannte Tage wie der Berchtoldstag
