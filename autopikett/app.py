@@ -136,22 +136,47 @@ class AutoPikettApp:
         numbers = ttk.LabelFrame(outer, text="Telefonnummern", padding=12)
         numbers.pack(fill="x")
         numbers.columnconfigure(1, weight=1)
+        numbers.columnconfigure(4, weight=1)
 
+        # Die Nummernfelder sind gesperrt, bis man daneben «ändern» ankreuzt -
+        # so wird eine Nummer nicht versehentlich verstellt.
         ttk.Label(numbers, text="Pikett EIN (einschalten):").grid(
             row=0, column=0, sticky="w"
         )
         self.on_number_var = tk.StringVar(value=self.settings.on_number)
-        ttk.Entry(numbers, textvariable=self.on_number_var, width=26).grid(
-            row=0, column=1, sticky="w", padx=(8, 28)
+        self.on_number_entry = ttk.Entry(
+            numbers, textvariable=self.on_number_var, width=26, state="readonly"
         )
+        self.on_number_entry.grid(row=0, column=1, sticky="w", padx=(8, 8))
+
+        self.on_number_edit = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            numbers,
+            text="ändern",
+            variable=self.on_number_edit,
+            command=lambda: self._unlock_number(
+                self.on_number_entry, self.on_number_edit.get()
+            ),
+        ).grid(row=0, column=2, sticky="w", padx=(0, 28))
 
         ttk.Label(numbers, text="Pikett AUS (ausschalten):").grid(
-            row=0, column=2, sticky="w"
+            row=0, column=3, sticky="w"
         )
         self.off_number_var = tk.StringVar(value=self.settings.off_number)
-        ttk.Entry(numbers, textvariable=self.off_number_var, width=26).grid(
-            row=0, column=3, sticky="w", padx=(8, 0)
+        self.off_number_entry = ttk.Entry(
+            numbers, textvariable=self.off_number_var, width=26, state="readonly"
         )
+        self.off_number_entry.grid(row=0, column=4, sticky="w", padx=(8, 8))
+
+        self.off_number_edit = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            numbers,
+            text="ändern",
+            variable=self.off_number_edit,
+            command=lambda: self._unlock_number(
+                self.off_number_entry, self.off_number_edit.get()
+            ),
+        ).grid(row=0, column=5, sticky="w")
 
         week = ttk.LabelFrame(
             outer, text="Woche - vier Umschaltungen pro aktivem Tag", padding=12
@@ -397,11 +422,25 @@ class AutoPikettApp:
             self.settings = settings
         core.save_settings(settings, self.settings_file)
 
+    def _unlock_number(self, entry: ttk.Entry, editable: bool) -> None:
+        """Nummernfeld nur bearbeitbar, solange die Checkbox aktiv ist."""
+        entry.configure(state="normal" if editable else "readonly")
+
+    def _lock_numbers(self) -> None:
+        """Nach dem Speichern die Nummernfelder wieder sperren."""
+        for var, entry in (
+            (self.on_number_edit, self.on_number_entry),
+            (self.off_number_edit, self.off_number_entry),
+        ):
+            var.set(False)
+            entry.configure(state="readonly")
+
     def on_save(self) -> None:
         settings = self._collect_settings()
         if settings is None:
             return
         self._store(settings)
+        self._lock_numbers()
         self._refresh_status()
         self.status_var.set(
             f"{self.status_var.get()} · gespeichert {datetime.now():%H:%M:%S}"

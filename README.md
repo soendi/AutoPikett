@@ -13,7 +13,9 @@ drücken - per `pywinauto`.
 
 - Fenster mit allen sieben Wochentagen als Checkbox
 - vier frei einstellbare Zeiten pro Tag, je mit Ziel **Ein** oder **Aus**
-- zwei Nummern: eine für "Pikett einschalten", eine für "Pikett ausschalten"
+- zwei Nummern: eine für "Pikett einschalten", eine für "Pikett ausschalten";
+  die Felder sind gesperrt, bis man daneben "ändern" ankreuzt, und nach dem
+  Speichern wieder gesperrt
 - rechts neben den Wochentagen die nächsten Feiertage von Balgach (SG), aus dem
   Klassen-Export von [feiertagskalender.ch](https://www.feiertagskalender.ch/)
   (`geo=1903`, `klasse=3` = nur gesetzlich anerkannte Feiertage); der Export wird
